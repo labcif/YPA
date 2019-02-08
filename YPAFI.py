@@ -145,11 +145,13 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.temp_dir = Case.getCurrentCase().getTempDirectory()
         if PlatformUtil.isWindowsOS():
             self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ypa.exe")
+            self.path_to_undark = os.path.join(os.path.dirname(os.path.abspath(__file__)), "undark.exe")
             if not os.path.exists(self.path_to_exe):
-                raise IngestModuleException("EXE was not found in module folder")               
-        self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App contacts",skCase)
-        self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App sms",skCase)
+                raise IngestModuleException("EXE was not found in module folder")                   
+        self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App Contacts",skCase)
+        self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App SMS",skCase)
         self.art_pictures = self.create_artifact_type("YPA_PICTURES","Your Phone Recent Pictures",skCase)
+        self.art_freespace = self.create_artifact_type("YPA_FREESPACE","Your Phone Rows Recovered",skCase)
 
         self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
         self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
@@ -169,6 +171,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase)      
      
         self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", skCase)
+
+        self.att_rec_row = self.create_attribute_type('YPA_REC_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data recovered from unvacuumed row", skCase)
         
         
         
@@ -231,6 +235,22 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, row[5]))
                         art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, row[7]))
                         self.index_artifact(blackboard, art,self.art_messages)
+                try:
+                    with open(self.temp_dir+'\\freespace.txt','w') as f:
+                        subprocess.Popen([self.path_to_undark,'-i', dbPath, '--freespace'],stdout=f).communicate()
+                    with open(self.temp_dir+'\\freespace.txt','r') as f:
+                        self.log(Level.INFO, ' '.join([self.path_to_undark,'-i', dbPath, '--freespace >']))
+                        self.log(Level.INFO, "called undark")
+                        line = f.readline()
+                        while line:
+                            self.log(Level.INFO, "opened result")
+                            art = file.newArtifact(self.art_freespace.getTypeID())
+                            art.addAttribute(BlackboardAttribute(self.att_rec_row, YourPhoneIngestModuleFactory.moduleName, str(line)))
+                            self.index_artifact(blackboard, art,self.art_freespace)
+                            line = f.readline()
+                except Exception  as e:
+                    self.log(Level.INFO, "failed to read freespace data")
+                    pass
             except Exception as e:
                 self.log(Level.INFO, "failed to open of the the csv files generated, starting next one")
                 pass

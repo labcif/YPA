@@ -149,6 +149,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 raise IngestModuleException("EXE was not found in module folder")               
         self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App contacts",skCase)
         self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App sms",skCase)
+        self.art_pictures = self.create_artifact_type("YPA_PICTURES","Your Phone Recent Pictures",skCase)
+
         self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
         self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
         self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase)
@@ -164,8 +166,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase) 
         self.att_body = self.create_attribute_type('YPA_BODY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message Body", skCase) 
         self.att_status = self.create_attribute_type('YPA_STATUS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase)         
-        self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase) 
-
+        self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase)      
+     
+        self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", skCase)
+        
         
         
 
@@ -180,50 +184,81 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         blackboard = Case.getCurrentCase().getServices().getBlackboard()
         skCase = Case.getCurrentCase().getSleuthkitCase()
         fileManager = Case.getCurrentCase().getServices().getFileManager()
-        self.log(Level.INFO, "starting to create stuff")
         
-        files = fileManager.findFiles(dataSource, "phone.db") #TODO:change name
+        files = fileManager.findFiles(dataSource, "phone.db") 
         numFiles = len(files)
         self.log(Level.INFO, "found " + str(numFiles) + " files")
         fileCount = 0
         for file in files:
             dbPath = os.path.join(self.temp_dir , str(file.getName()))
             ContentUtils.writeToFile(file, File(dbPath))
-            subprocess.Popen([self.path_to_exe, dbPath,self.temp_dir+'\\']).communicate()[0]
-            with open(self.temp_dir+'\\'+'contacts.csv','rb') as conFile:
-                creader = csv.reader(conFile,delimiter=',',quotechar='"')
-                ignoreFirst = True
-                for row in creader:
-                    if ignoreFirst:
-                        ignoreFirst = False
-                        continue
-                    art = file.newArtifact(self.art_contacts.getTypeID())
-                    art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, row[0]))
-                    art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, row[1]))
-                    art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, row[2].decode('utf-8')))
-                    art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, row[3]))
-                    art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, row[4]))
-                    art.addAttribute(BlackboardAttribute(self.att_last_contact_time, YourPhoneIngestModuleFactory.moduleName, row[5]))
-                    art.addAttribute(BlackboardAttribute(self.att_last_update_time, YourPhoneIngestModuleFactory.moduleName, row[6]))
-                    self.index_artifact(blackboard, art,self.art_contacts)
-            with open(self.temp_dir+'\\'+'messages.csv','rb') as conFile:
-                creader = csv.reader(conFile,delimiter=',',quotechar='"')
-                ignoreFirst = True
-                for row in creader:
-                    if ignoreFirst:
-                        ignoreFirst = False
-                        continue
-                    art = file.newArtifact(self.art_messages.getTypeID())
-                    art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, row[0]))
-                    art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, row[1]))
-                    art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, row[2]))
-                    art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, row[6]))
-                    art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, row[3]))
-                    art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, row[4].decode('utf-8')))
-                    art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, row[5]))
-                    art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, row[7]))
-                    self.index_artifact(blackboard, art,self.art_messages)
-                   
+            try:
+                subprocess.Popen([self.path_to_exe, dbPath,self.temp_dir+'\\']).communicate()[0]
+            except Exception  as e:
+                self.log(Level.INFO, "failed to open of the the files found, starting next one")
+                continue
+            try:
+                with open(self.temp_dir+'\\'+'contacts.csv','rb') as conFile:
+                    creader = csv.reader(conFile,delimiter=',',quotechar='"')
+                    ignoreFirst = True
+                    for row in creader:
+                        if ignoreFirst:
+                            ignoreFirst = False
+                            continue
+                        art = file.newArtifact(self.art_contacts.getTypeID())
+                        art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, row[0]))
+                        art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, row[1]))
+                        art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, row[2].decode('utf-8')))
+                        art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, row[3]))
+                        art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, row[4]))
+                        art.addAttribute(BlackboardAttribute(self.att_last_contact_time, YourPhoneIngestModuleFactory.moduleName, row[5]))
+                        art.addAttribute(BlackboardAttribute(self.att_last_update_time, YourPhoneIngestModuleFactory.moduleName, row[6]))
+                        self.index_artifact(blackboard, art,self.art_contacts)
+                with open(self.temp_dir+'\\'+'messages.csv','rb') as conFile:
+                    creader = csv.reader(conFile,delimiter=',',quotechar='"')
+                    ignoreFirst = True
+                    for row in creader:
+                        if ignoreFirst:
+                            ignoreFirst = False
+                            continue
+                        art = file.newArtifact(self.art_messages.getTypeID())
+                        art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, row[0]))
+                        art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, row[1]))
+                        art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, row[2]))
+                        art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, row[6]))
+                        art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, row[3]))
+                        art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, row[4].decode('utf-8')))
+                        art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, row[5]))
+                        art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, row[7]))
+                        self.index_artifact(blackboard, art,self.art_messages)
+            except Exception as e:
+                self.log(Level.INFO, "failed to open of the the csv files generated, starting next one")
+                pass
+            finally:
+                os.remove(self.temp_dir+'\\'+'contacts.csv')
+                os.remove(self.temp_dir+'\\'+'messages.csv')
+                os.remove(dbPath)
+            try:
+                full_path = (file.getParentPath() + file.getName()) 
+                split = full_path.split('/')
+                guidPath = '/'.join(split[:-3])
+                usrPath = guidPath+'/User'       
+                self.log(Level.INFO, usrPath)
+                ufiles = fileManager.findFiles(dataSource, '%', usrPath)
+                self.log(Level.INFO, ufiles[0].getName())
+                for ufile in ufiles:
+                    rpPath = ufile.getParentPath() + ufile.getName() +'/Recent Photos/' 
+                    picfiles = fileManager.findFiles(dataSource, '%', rpPath)
+                    for pic in picfiles:
+                        self.log(Level.INFO, pic.getName())
+                        # Make an artifact
+                        art = pic.newArtifact(self.art_pictures.getTypeID())
+                                    # Register file size
+                        art.addAttribute(BlackboardAttribute(self.att_pic_size, YourPhoneIngestModuleFactory.moduleName, pic.getSize()))
+                        self.index_artifact(blackboard, art, self.art_pictures)
+            except Exception as e:
+                self.log(Level.INFO, "failed to open of the the csv files generated, starting next one")
+                continue
             
         return IngestModule.ProcessResult.OK   
 

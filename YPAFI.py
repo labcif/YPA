@@ -6,6 +6,7 @@ import subprocess
 import time
 import json
 import sys
+import csv
 
 from javax.swing import JCheckBox
 from javax.swing import JList
@@ -21,7 +22,6 @@ from javax.swing import JScrollPane
 from javax.swing import JComponent
 from java.awt.event import KeyListener
 from org.python.core.util import StringUtil
-from Registry import Registry
 from java.lang import Class
 from java.lang import System
 from java.sql import DriverManager, SQLException
@@ -141,12 +141,33 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     # 'context' is an instance of org.sleuthkit.autopsy.ingest.IngestJobContext.
     # See: http://sleuthkit.org/autopsy/docs/api-docs/3.1/classorg_1_1sleuthkit_1_1autopsy_1_1ingest_1_1_ingest_job_context.html
     def startUp(self, context):
+        skCase = Case.getCurrentCase().getSleuthkitCase()
         self.temp_dir = Case.getCurrentCase().getTempDirectory()
         if PlatformUtil.isWindowsOS():
-            self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "read_ypa.exe")
+            self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ypa.exe")
             if not os.path.exists(self.path_to_exe):
-                raise IngestModuleException("EXE was not found in module folder")
-   
+                raise IngestModuleException("EXE was not found in module folder")               
+        self.art_contacts = self.create_artifact_type("YPA_Contacts","Your Phone App contacts",skCase)
+        self.art_messages = self.create_artifact_type("YPA_Message","Your Phone App sms",skCase)
+        self.att_contact_id = self.create_attribute_type('YPA_contact_id', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
+        self.att_address = self.create_attribute_type('YPA_address', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
+        self.att_display_name = self.create_attribute_type('YPA_display_name', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase)
+        self.att_address_type = self.create_attribute_type('YPA_address_type', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address type", skCase)
+        self.att_times_contacted = self.create_attribute_type('YPA_times_contacted', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Times contacted", skCase)
+        self.att_last_contact_time = self.create_attribute_type('YPA_last_contact_time', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last contact time", skCase) 
+        self.att_last_update_time = self.create_attribute_type('YPA_last_update_time', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last update time", skCase) 
+        self.att_thread_id = self.create_attribute_type('YPA_thread_id', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Thread id", skCase) 
+        self.att_message_id = self.create_attribute_type('YPA_message_id', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message id", skCase) 
+        self.att_from_address = self.create_attribute_type('YPA_from_address', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase) 
+        self.att_display_name = self.create_attribute_type('YPA_display_name', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase) 
+        self.att_body = self.create_attribute_type('YPA_body', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message Body", skCase) 
+        self.att_status = self.create_attribute_type('YPA_status', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase) 
+        self.att_timestamp = self.create_attribute_type('YPA_timestamp', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase) 
+
+        
+        
+
+        
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
     # See: http://www.sleuthkit.org/sleuthkit/docs/jni-docs/interfaceorg_1_1sleuthkit_1_1datamodel_1_1_content.html
@@ -157,13 +178,54 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         blackboard = Case.getCurrentCase().getServices().getBlackboard()
         skCase = Case.getCurrentCase().getSleuthkitCase()
         fileManager = Case.getCurrentCase().getServices().getFileManager()
-        files = fileManager.findFiles(dataSource, "ActivitiesCache.db") #TODO:change name
+        self.log(Level.INFO, "starting to create stuff")
+        
+        files = fileManager.findFiles(dataSource, "phone.db") #TODO:change name
         numFiles = len(files)
         self.log(Level.INFO, "found " + str(numFiles) + " files")
         fileCount = 0
         for file in files:
-            dbPath = os.path.join(self.temp_dir + "\YPA", str(file.getId()))
+            dbPath = os.path.join(self.temp_dir , str(file.getName()))
             ContentUtils.writeToFile(file, File(dbPath))
+            subprocess.Popen([self.path_to_exe, dbPath,self.temp_dir+'\\']).communicate()[0]
+            with open(self.temp_dir+'\\'+'contacts.csv','rb') as conFile:
+                creader = csv.reader(conFile,delimiter=',',quotechar='"')
+                ignoreFirst = True
+                for row in creader:
+                    if ignoreFirst:
+                        ignoreFirst = False
+                        continue
+                    art = file.newArtifact(self.art_contacts.getTypeID())
+                    art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, row[0]))
+                    art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, row[1]))
+                    art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, row[2].decode('utf-8')))
+                    art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, row[3]))
+                    art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, row[4]))
+                    art.addAttribute(BlackboardAttribute(self.att_last_contact_time, YourPhoneIngestModuleFactory.moduleName, row[5]))
+                    art.addAttribute(BlackboardAttribute(self.att_last_update_time, YourPhoneIngestModuleFactory.moduleName, row[6]))
+                    self.index_artifact(blackboard, art,self.art_contacts)
+            with open(self.temp_dir+'\\'+'messages.csv','rb') as conFile:
+                creader = csv.reader(conFile,delimiter=',',quotechar='"')
+                ignoreFirst = True
+                for row in creader:
+                    if ignoreFirst:
+                        ignoreFirst = False
+                        continue
+                    art = file.newArtifact(self.art_messages.getTypeID())
+                    art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, row[0]))
+                    art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, row[1]))
+                    art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, row[2]))
+                    art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, row[3]))
+                    art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, row[4].decode('utf-8')))
+                    art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, row[5]))
+                    art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, row[6]))
+                    self.index_artifact(blackboard, art,self.art_messages)
+                   
+            
+
+
+
+
 
 
         

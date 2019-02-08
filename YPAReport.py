@@ -24,8 +24,11 @@ from java.awt import Color
 
 COLLAPSE_PREFIX = "collapsechat"
 HTML_COLLAPSE_PREFIX = "#" + COLLAPSE_PREFIX
-SELF_MESSAGE_DEFAULT = "n/a (sent)"
+MODAL_PREFIX = "modal"
+HTML_MODAL_PREFIX = "#" + MODAL_PREFIX
+SELF_MESSAGE_DEFAULT = "n/a (self)"
 SELF_USER = "Self"
+NUM_ARTIFACTS_PROGRESS = 10
 
 class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
@@ -67,7 +70,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         return row
 
-    def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user):
+    def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user, address):
         html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
         div_msg = html_file.new_tag("div")
 
@@ -76,6 +79,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             from_user = SELF_USER
         else:
             div_msg['class'] = "container"
+            div_msg['data-toggle'] = "modal"
+            div_msg['data-target'] = HTML_MODAL_PREFIX + address.replace('+','plus')
+
 
         p_sender = html_file.new_tag("p")
         p_bold_sender = html_file.new_tag("b")
@@ -91,7 +97,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         div_msg.append(p_msg_body)
         div_msg.append(span_time)
 
-        self.log(Level.INFO, "Chat selected: "+html_chat_id)
         chat = html_file.select(html_chat_id)[0]
         chat.append(div_msg)
 
@@ -118,9 +123,55 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         collapseable_chats = html_file.select("#page-content-wrapper")[0]
         collapseable_chats.append(div_chat)
 
-    def add_link_to_html_report(self, report, tag, link_to):
-        link = report.select(tag)[0]
-        link['href'] = link_to
+    def add_contact_modal(self, html_file, artifact, id):
+        div_modal = html_file.new_tag("div")
+        div_modal['class'] = "modal fade"
+        div_modal['id'] = MODAL_PREFIX + id.replace('+','plus')
+        div_modal['role'] = "dialog"
+        div_modal['tabindex'] = "-1"
+
+        div_dialog = html_file.new_tag("div")
+        div_dialog['class'] = "modal-dialog"
+        div_dialog['role'] = "document"
+        div_modal.append(div_dialog)
+
+        div_content = html_file.new_tag("div")
+        div_content['class'] = "modal-content"
+        div_dialog.append(div_content)
+
+        div_header = html_file.new_tag("div")
+        div_header['class'] = "modal-header"
+        div_content.append(div_header)
+
+        h_title = html_file.new_tag("h5")
+        h_title['class'] = "modal-title"
+        h_title.string = "Contact details"
+        div_header.append(h_title)
+
+        button_close = html_file.new_tag("button")
+        button_close['class'] = "close"
+        button_close['data-dismiss'] = "modal"
+        div_header.append(button_close)
+
+        span_close = html_file.new_tag("span")
+        span_close.string = "x"
+        button_close.append(span_close)
+
+        div_body = html_file.new_tag("div")
+        div_body['class'] = "modal-body"
+
+        for attribute in artifact.getAttributes():
+            p_attribute = html_file.new_tag("p")
+            b_attribute_display = html_file.new_tag("b")
+            b_attribute_display.string = attribute.getAttributeType().getDisplayName()
+            p_attribute.string = attribute.getDisplayString()
+            div_body.append(b_attribute_display)
+            div_body.append(p_attribute)
+
+        div_content.append(div_body)
+
+        html_body = html_file.select("#page-content-wrapper")[0]
+        html_body.append(div_modal)
 
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
     # The 'progressBar' object is of type ReportProgressPanel.
@@ -141,7 +192,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         # Get artifact lists
         art_list_messages = skCase.getBlackboardArtifacts("YPA_MESSAGE")
-        total_artifact_count = len(art_list_messages)
+        art_list_contacts = skCase.getBlackboardArtifacts("YPA_CONTACTS")
+        total_artifact_count = len(art_list_messages) + len(art_list_contacts)
 
 
 
@@ -155,11 +207,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Dividing by ten because progress bar shouldn't be updated too frequently
         # So we'll update it every X artifacts (defined by a constant)
         # Plus 2 for 2 additional steps
-        #max_progress = (ceil(total_artifact_count / NUM_ARTIFACTS_PROGRESS) + 2)
-        #progressBar.setMaximumProgress(int(max_progress))
-
-        # Get what reports the user wants
-        # generateHTML = self.configPanel.getGenerateHTML()
+        max_progress = (ceil(total_artifact_count / NUM_ARTIFACTS_PROGRESS) + 2)
+        progressBar.setMaximumProgress(int(max_progress))
 
         # First additional step here
         progressBar.increment()
@@ -174,41 +223,41 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             txt = base_dir.read()
             html_ypa = bs4.BeautifulSoup(txt)
 
-        """self.add_chat_to_html_report(html_ypa, "test")
-        self.add_msg_to_html_report(html_ypa, "test", "First!", "12:12", "User 2")
-        self.add_msg_to_html_report(html_ypa, "test", "Hello", "12:12", None)
-        self.add_msg_to_html_report(html_ypa, "test", "Hi. How are you doing?", "12:13", "User 2")
-        self.add_msg_to_html_report(html_ypa, "test", "Fine, what about you?", "12:15", None)
-        self.add_msg_to_html_report(html_ypa, "test", "Doin' great.", "12:18", "User 2")
-        self.add_chat_to_html_report(html_ypa, "test2")
-        self.add_msg_to_html_report(html_ypa, "test2", "Another one.", "12:18", None)"""
-
         # Get Attribute types
         att_thread_id = skCase.getAttributeType("YPA_THREAD_ID")
         att_display_name = skCase.getAttributeType("YPA_DISPLAY_NAME")
         att_body = skCase.getAttributeType("YPA_BODY")
         att_timestamp = skCase.getAttributeType("YPA_TIMESTAMP")
         att_from_address = skCase.getAttributeType("YPA_FROM_ADDRESS")
+        att_address = skCase.getAttributeType("YPA_ADDRESS")
+        att_recipient_list = skCase.getAttributeType("YPA_RECIPIENT_LIST")
 
+        art_count = 0
+        for artifact in art_list_contacts:
+            id_for_contact = artifact.getAttribute(att_address).getDisplayString()
+            self.add_contact_modal(html_ypa, artifact, id_for_contact)
 
         list_thread_ids = []
+        art_count = 0
         for artifact in art_list_messages:
             thread_id = artifact.getAttribute(att_thread_id).getValueString()
-            chat_name = artifact.getAttribute(att_display_name).getValueString()
-            sender = chat_name + " (" + artifact.getAttribute(att_from_address).getValueString() + ")"
-            if chat_name == "n/a":
-                if sender == "n/a (sent)":
-                    chat_name = SELF_USER + " started thread"
-                else:
-                    chat_name = sender
+            display_name = artifact.getAttribute(att_display_name).getValueString()
+            chat_name = artifact.getAttribute(att_recipient_list).getValueString()
+            address = artifact.getAttribute(att_from_address).getValueString()
+            sender = display_name + " (" + address + ")"
             if thread_id not in list_thread_ids:
                 # Create Chat
                 list_thread_ids.append(thread_id)
                 self.add_chat_to_html_report(html_ypa, chat_name, thread_id)
+
+            # Add message
             body = artifact.getAttribute(att_body).getValueString()
             timestamp = artifact.getAttribute(att_timestamp).getValueString()
-            self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender)
-            # Add message
+            self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address)
+
+            art_count += 1
+            if art_count % NUM_ARTIFACTS_PROGRESS == 0:
+                progressBar.increment()
 
         progressBar.updateStatusLabel("Saving report")
 

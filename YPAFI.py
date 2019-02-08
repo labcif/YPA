@@ -123,7 +123,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def create_artifact_type(self, art_name, art_desc, skCase):
         try:
-            skCase.addBlackboardArtifactType(art_name, "WTA: " + art_desc)
+            skCase.addBlackboardArtifactType(art_name, "YPA: " + art_desc)
         except:
             self.log(Level.INFO, "ERROR creating artifact type: " + art_desc)
         art = skCase.getArtifactType(art_name)

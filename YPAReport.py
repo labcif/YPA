@@ -63,6 +63,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         return row
 
     def add_msg_to_html_report(self, html_file, chat_id, body, time, from_user):
+        html_chat_id = "#" + chat_id
         div_msg = html_file.new_tag("div")
 
         if from_user == None:
@@ -85,8 +86,30 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         div_msg.append(p_msg_body)
         div_msg.append(span_time)
 
-        chat = html_file.select(chat_id)[0]
+        chat = html_file.select(html_chat_id)[0]
         chat.append(div_msg)
+
+    def add_chat_to_html_report(self, html_file, chat_id):
+        html_chat_id = "#" + chat_id
+
+        # Add chat to sidebar
+        a_chat = html_file.new_tag("a")
+        a_chat['class'] = "list-group-item list-group-item-action bg-light"
+        a_chat['data-toggle'] = "collapse"
+        a_chat['href'] = html_chat_id
+        a_chat.string = chat_id
+
+        chats = html_file.select("#sidebar-chats")[0]
+        chats.append(a_chat)
+
+        # Add chat collapseable
+        div_chat = html_file.new_tag("div")
+        div_chat['class'] = "container-fluid collapse multi-collapse"
+        div_chat['id'] = chat_id
+        div_chat['data-parent'] = "#page-content-wrapper"
+
+        collapseable_chats = html_file.select("#page-content-wrapper")[0]
+        collapseable_chats.append(div_chat)
 
     def add_link_to_html_report(self, report, tag, link_to):
         link = report.select(tag)[0]
@@ -104,7 +127,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Configure progress bar for 2 tasks
         progressBar.setIndeterminate(False)
         progressBar.start()
-        progressBar.updateStatusLabel("Getting files and artifacts...")
+        progressBar.updateStatusLabel("Getting artifacts...")
 
         skCase = Case.getCurrentCase().getSleuthkitCase()
 
@@ -142,12 +165,16 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             txt = base_dir.read()
             html_ypa = bs4.BeautifulSoup(txt)
 
-        self.add_msg_to_html_report(html_ypa, "#collapseChat1", "Test msg", "13:37", None)
-        self.add_msg_to_html_report(html_ypa, "#collapseChat1", "Test msgXD", "13:38", "User 2")
+        self.add_chat_to_html_report(html_ypa, "test")
+        self.add_msg_to_html_report(html_ypa, "test", "First!", "12:12", "User 2")
+        self.add_msg_to_html_report(html_ypa, "test", "Hello", "12:12", None)
+        self.add_msg_to_html_report(html_ypa, "test", "Hi. How are you doing?", "12:13", "User 2")
+        self.add_msg_to_html_report(html_ypa, "test", "Fine, what about you?", "12:15", None)
+        self.add_msg_to_html_report(html_ypa, "test", "Doin' great.", "12:18", "User 2")
+        self.add_chat_to_html_report(html_ypa, "test2")
+        self.add_msg_to_html_report(html_ypa, "test2", "Another one.", "12:18", None)
 
-        # progressBar.updateStatusLabel("Going through all files...")
-
-        # progressBar.updateStatusLabel("Going through Reported program artifacts now, takes some time...")
+        progressBar.updateStatusLabel("Saving report")
 
         with open(html_file_name, "w") as outf:
             outf.write(str(html_ypa))

@@ -22,9 +22,14 @@ from javax.swing import JLabel
 from javax.swing import BoxLayout
 from java.awt import Color
 
+COLLAPSE_PREFIX = "collapsechat"
+HTML_COLLAPSE_PREFIX = "#" + COLLAPSE_PREFIX
+SELF_MESSAGE_DEFAULT = "n/a (sent)"
+SELF_USER = "Self"
+
 class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
-    moduleName = "Your Phone Analyzer Report"
+    moduleName = "YPA Report"
 
     _logger = None
 
@@ -62,13 +67,13 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         return row
 
-    def add_msg_to_html_report(self, html_file, chat_id, body, time, from_user):
-        html_chat_id = "#" + chat_id
+    def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user):
+        html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
         div_msg = html_file.new_tag("div")
 
-        if from_user == None:
+        if from_user == None or from_user == SELF_MESSAGE_DEFAULT:
             div_msg['class'] = "container darker"
-            from_user = "You"
+            from_user = SELF_USER
         else:
             div_msg['class'] = "container"
 
@@ -80,17 +85,19 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         p_msg_body.string = body
         span_time = html_file.new_tag("span")
         span_time['class'] = "time-left"
-        span_time.string = time
+        span_time.string = timestamp
 
         div_msg.append(p_sender)
         div_msg.append(p_msg_body)
         div_msg.append(span_time)
 
+        self.log(Level.INFO, "Chat selected: "+html_chat_id)
         chat = html_file.select(html_chat_id)[0]
         chat.append(div_msg)
 
-    def add_chat_to_html_report(self, html_file, chat_id):
-        html_chat_id = "#" + chat_id
+    def add_chat_to_html_report(self, html_file, chat_id, thread_id):
+        html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
+        div_chat_id = COLLAPSE_PREFIX + thread_id
 
         # Add chat to sidebar
         a_chat = html_file.new_tag("a")
@@ -105,7 +112,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Add chat collapseable
         div_chat = html_file.new_tag("div")
         div_chat['class'] = "container-fluid collapse multi-collapse"
-        div_chat['id'] = chat_id
+        div_chat['id'] = div_chat_id
         div_chat['data-parent'] = "#page-content-wrapper"
 
         collapseable_chats = html_file.select("#page-content-wrapper")[0]
@@ -133,8 +140,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
 
         # Get artifact lists
-        # art_list_reported_progs = skCase.getBlackboardArtifacts("TSK_LFA_REPORTED_PROGRAMS")
-        total_artifact_count = 1
+        art_list_messages = skCase.getBlackboardArtifacts("YPA_MESSAGE")
+        total_artifact_count = len(art_list_messages)
+
+
 
         if total_artifact_count == 0:
             msg = "There seem to be no YPA artifacts. Did you run the ingest module? Please cancel this report and try again after the ingest module."
@@ -165,14 +174,41 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             txt = base_dir.read()
             html_ypa = bs4.BeautifulSoup(txt)
 
-        self.add_chat_to_html_report(html_ypa, "test")
+        """self.add_chat_to_html_report(html_ypa, "test")
         self.add_msg_to_html_report(html_ypa, "test", "First!", "12:12", "User 2")
         self.add_msg_to_html_report(html_ypa, "test", "Hello", "12:12", None)
         self.add_msg_to_html_report(html_ypa, "test", "Hi. How are you doing?", "12:13", "User 2")
         self.add_msg_to_html_report(html_ypa, "test", "Fine, what about you?", "12:15", None)
         self.add_msg_to_html_report(html_ypa, "test", "Doin' great.", "12:18", "User 2")
         self.add_chat_to_html_report(html_ypa, "test2")
-        self.add_msg_to_html_report(html_ypa, "test2", "Another one.", "12:18", None)
+        self.add_msg_to_html_report(html_ypa, "test2", "Another one.", "12:18", None)"""
+
+        # Get Attribute types
+        att_thread_id = skCase.getAttributeType("YPA_THREAD_ID")
+        att_display_name = skCase.getAttributeType("YPA_DISPLAY_NAME")
+        att_body = skCase.getAttributeType("YPA_BODY")
+        att_timestamp = skCase.getAttributeType("YPA_TIMESTAMP")
+        att_from_address = skCase.getAttributeType("YPA_FROM_ADDRESS")
+
+
+        list_thread_ids = []
+        for artifact in art_list_messages:
+            thread_id = artifact.getAttribute(att_thread_id).getValueString()
+            chat_name = artifact.getAttribute(att_display_name).getValueString()
+            sender = chat_name + " (" + artifact.getAttribute(att_from_address).getValueString() + ")"
+            if chat_name == "n/a":
+                if sender == "n/a (sent)":
+                    chat_name = SELF_USER + " started thread"
+                else:
+                    chat_name = sender
+            if thread_id not in list_thread_ids:
+                # Create Chat
+                list_thread_ids.append(thread_id)
+                self.add_chat_to_html_report(html_ypa, chat_name, thread_id)
+            body = artifact.getAttribute(att_body).getValueString()
+            timestamp = artifact.getAttribute(att_timestamp).getValueString()
+            self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender)
+            # Add message
 
         progressBar.updateStatusLabel("Saving report")
 
@@ -216,8 +252,7 @@ class LFA_ConfigPanel(JPanel):
         self.add(descriptionLabel)
 
         skCase = Case.getCurrentCase().getSleuthkitCase()
-        # art_count = len(skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'TSK_LFA_%'"))
-        art_count = 0
+        art_count = len(skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_%'"))
         if art_count == 0:
             warningLabel = JLabel(" WARNING: Please run the ingest module before this report module.")
             warningLabel.setForeground(Color.RED)

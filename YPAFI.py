@@ -29,6 +29,7 @@ from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.datamodel import SleuthkitCase
 from org.sleuthkit.datamodel import AbstractFile
+from org.sleuthkit.autopsy.casemodule.services import Blackboard
 from org.sleuthkit.datamodel import ReadContentInputStream
 from org.sleuthkit.datamodel import BlackboardArtifact
 from org.sleuthkit.datamodel import BlackboardAttribute
@@ -74,10 +75,9 @@ class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
     def hasIngestJobSettingsPanel(self):
         return True
 
-    # TODO: Update class names to ones that you create below
     def getIngestJobSettingsPanel(self, settings):
         if not isinstance(settings, YourPhoneWithUISettings):
-            raise IllegalArgumentException("Expected settings argument to be instanceof SampleIngestModuleSettings")
+            raise IllegalArgumentException("Expected settings argument to be instanceof YourPhoneWithUISettings")
         self.settings = settings
         return YourPhoneWithUISettingsPanel(self.settings)
 
@@ -147,22 +147,22 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ypa.exe")
             if not os.path.exists(self.path_to_exe):
                 raise IngestModuleException("EXE was not found in module folder")               
-        self.art_contacts = self.create_artifact_type("YPA_Contacts","Your Phone App contacts",skCase)
-        self.art_messages = self.create_artifact_type("YPA_Message","Your Phone App sms",skCase)
-        self.att_contact_id = self.create_attribute_type('YPA_contact_id', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
-        self.att_address = self.create_attribute_type('YPA_address', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
-        self.att_display_name = self.create_attribute_type('YPA_display_name', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase)
-        self.att_address_type = self.create_attribute_type('YPA_address_type', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address type", skCase)
-        self.att_times_contacted = self.create_attribute_type('YPA_times_contacted', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Times contacted", skCase)
-        self.att_last_contact_time = self.create_attribute_type('YPA_last_contact_time', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last contact time", skCase) 
-        self.att_last_update_time = self.create_attribute_type('YPA_last_update_time', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last update time", skCase) 
-        self.att_thread_id = self.create_attribute_type('YPA_thread_id', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Thread id", skCase) 
-        self.att_message_id = self.create_attribute_type('YPA_message_id', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message id", skCase) 
-        self.att_from_address = self.create_attribute_type('YPA_from_address', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase) 
-        self.att_display_name = self.create_attribute_type('YPA_display_name', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase) 
-        self.att_body = self.create_attribute_type('YPA_body', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message Body", skCase) 
-        self.att_status = self.create_attribute_type('YPA_status', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase) 
-        self.att_timestamp = self.create_attribute_type('YPA_timestamp', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase) 
+        self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App contacts",skCase)
+        self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App sms",skCase)
+        self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
+        self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
+        self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase)
+        self.att_address_type = self.create_attribute_type('YPA_ADDRESS_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address type", skCase)
+        self.att_times_contacted = self.create_attribute_type('YPA_TIMES_CONTACTED', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Times contacted", skCase)
+        self.att_last_contact_time = self.create_attribute_type('YPA_LAST_CONTACT_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last contact time", skCase) 
+        self.att_last_update_time = self.create_attribute_type('YPA_LAST_UPDATE_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last update time", skCase) 
+        self.att_thread_id = self.create_attribute_type('YPA_THREAD_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Thread id", skCase) 
+        self.att_message_id = self.create_attribute_type('YPA_MESSAGE_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message id", skCase) 
+        self.att_from_address = self.create_attribute_type('YPA_FROM_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase) 
+        self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase) 
+        self.att_body = self.create_attribute_type('YPA_BODY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message Body", skCase) 
+        self.att_status = self.create_attribute_type('YPA_STATUS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase) 
+        self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase) 
 
         
         
@@ -222,16 +222,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.index_artifact(blackboard, art,self.art_messages)
                    
             
-
-
-
-
-
-
-        
         return IngestModule.ProcessResult.OK   
 
-class YourPhoneWithUISettings(IngestModuleIngestJobSettings): #these are just in case we end up needing an UI
+class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
     serialVersionUID = 1L
     
     def __init__(self):
@@ -262,10 +255,9 @@ class YourPhoneWithUISettings(IngestModuleIngestJobSettings): #these are just in
         self.flag2 = flag2
 
 # UI that is shown to user for each ingest job so they can configure the job.
-# TODO: Rename this
 
 
-class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel): #these are just in case we end up needing an UI
+class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel): # These are just in case we end up needing an UI
     # Note, we can't use a self.settings instance variable.
     # Rather, self.local_settings is used.
     # https://wiki.python.org/jython/UserGuide#javabean-properties

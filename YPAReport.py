@@ -73,14 +73,17 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user, address):
         html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
         div_msg = html_file.new_tag("div")
+        span_time = html_file.new_tag("span")
 
         if from_user == None or from_user == SELF_MESSAGE_DEFAULT:
-            div_msg['class'] = "container darker"
+            div_msg['class'] = "container darker text-right"
             from_user = SELF_USER
+            span_time['class'] = "time-right"
         else:
             div_msg['class'] = "container"
             div_msg['data-toggle'] = "modal"
             div_msg['data-target'] = HTML_MODAL_PREFIX + address.replace('+','plus')
+            span_time['class'] = "time-left"
 
 
         p_sender = html_file.new_tag("p")
@@ -89,8 +92,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         p_sender.append(p_bold_sender)
         p_msg_body = html_file.new_tag("p")
         p_msg_body.string = body
-        span_time = html_file.new_tag("span")
-        span_time['class'] = "time-left"
         span_time.string = timestamp
 
         div_msg.append(p_sender)

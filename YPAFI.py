@@ -144,20 +144,22 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         skCase = Case.getCurrentCase().getSleuthkitCase()
         self.temp_dir = Case.getCurrentCase().getTempDirectory()
         if PlatformUtil.isWindowsOS():
-            self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ypa.exe")
-            if not os.path.exists(self.path_to_exe):
-                raise IngestModuleException("EXE was not found in module folder")               
-        self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App contacts",skCase)
-        self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App sms",skCase)
+            #self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ypa.exe") #OLD
+            self.path_to_undark = os.path.join(os.path.dirname(os.path.abspath(__file__)), "undark.exe")
+            if not os.path.exists(self.path_to_undark):
+                raise IngestModuleException("EXE was not found in module folder")                   
+        self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App Contacts",skCase)
+        self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App SMS",skCase)
         self.art_pictures = self.create_artifact_type("YPA_PICTURES","Your Phone Recent Pictures",skCase)
+        self.art_freespace = self.create_artifact_type("YPA_FREESPACE","Your Phone Rows Recovered",skCase)
 
         self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
         self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
         self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase)
         self.att_address_type = self.create_attribute_type('YPA_ADDRESS_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address type", skCase)
         self.att_times_contacted = self.create_attribute_type('YPA_TIMES_CONTACTED', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Times contacted", skCase)
-        self.att_last_contact_time = self.create_attribute_type('YPA_LAST_CONTACT_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last contact time", skCase) 
-        self.att_last_update_time = self.create_attribute_type('YPA_LAST_UPDATE_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last update time", skCase) 
+        self.att_last_contacted_time = self.create_attribute_type('YPA_LAST_CONTACT_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last contacted time", skCase) 
+        self.att_last_updated_time = self.create_attribute_type('YPA_LAST_UPDATE_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last updated time", skCase) 
 
         self.att_thread_id = self.create_attribute_type('YPA_THREAD_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Thread id", skCase) 
         self.att_message_id = self.create_attribute_type('YPA_MESSAGE_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message id", skCase) 
@@ -169,7 +171,13 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase)      
      
         self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", skCase)
-        
+
+        self.att_rec_row = self.create_attribute_type('YPA_REC_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data recovered from unvacuumed row", skCase)
+        self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, datetime(a.last_contacted_time / 10000000 - 11644473600,'unixepoch') as last_contacted_time,  datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
+        self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, ifnull(m.from_address,'self') as from_address, datetime(m.timestamp/ 10000000 - 11644473600,'unixepoch') as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
+        self.address_types = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}  
+
+
         
         
 
@@ -193,50 +201,42 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             dbPath = os.path.join(self.temp_dir , str(file.getName()))
             ContentUtils.writeToFile(file, File(dbPath))
             try:
-                subprocess.Popen([self.path_to_exe, dbPath,self.temp_dir+'\\']).communicate()[0]
-            except Exception  as e:
-                self.log(Level.INFO, "failed to open of the the files found, starting next one")
+                Class.forName("org.sqlite.JDBC").newInstance()
+                dbConn = DriverManager.getConnection(
+                    "jdbc:sqlite:%s" % dbPath)
+            except Exception as e:
+                self.log(Level.INFO, "Could not open database file (not SQLite) " +
+                         file.getName() + " (" + str(e) + ")")
                 continue
             try:
-                with open(self.temp_dir+'\\'+'contacts.csv','rb') as conFile:
-                    creader = csv.reader(conFile,delimiter=',',quotechar='"')
-                    ignoreFirst = True
-                    for row in creader:
-                        if ignoreFirst:
-                            ignoreFirst = False
-                            continue
-                        art = file.newArtifact(self.art_contacts.getTypeID())
-                        art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, row[0]))
-                        art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, row[1]))
-                        art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, row[2].decode('utf-8')))
-                        art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, row[3]))
-                        art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, row[4]))
-                        art.addAttribute(BlackboardAttribute(self.att_last_contact_time, YourPhoneIngestModuleFactory.moduleName, row[5]))
-                        art.addAttribute(BlackboardAttribute(self.att_last_update_time, YourPhoneIngestModuleFactory.moduleName, row[6]))
-                        self.index_artifact(blackboard, art,self.art_contacts)
-                with open(self.temp_dir+'\\'+'messages.csv','rb') as conFile:
-                    creader = csv.reader(conFile,delimiter=',',quotechar='"')
-                    ignoreFirst = True
-                    for row in creader:
-                        if ignoreFirst:
-                            ignoreFirst = False
-                            continue
-                        art = file.newArtifact(self.art_messages.getTypeID())
-                        art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, row[0]))
-                        art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, row[1]))
-                        art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, row[2]))
-                        art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, row[6]))
-                        art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, row[3]))
-                        art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, row[4].decode('utf-8')))
-                        art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, row[5]))
-                        art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, row[7]))
-                        self.index_artifact(blackboard, art,self.art_messages)
+                stmt =dbConn.createStatement()
+                contacts = stmt.executeQuery(self.contact_query)
+                self.processContacts(contacts,file,blackboard,skCase)
+                stmt =dbConn.createStatement()
+                messages = stmt.executeQuery(self.messages_query)
+                self.processMessages(messages,file,blackboard,skCase)
+                if PlatformUtil.isWindowsOS():                
+                    try:
+                        with open(self.temp_dir+'\\freespace.txt','w') as f:
+                            subprocess.Popen([self.path_to_undark,'-i', dbPath, '--freespace'],stdout=f).communicate()
+                        with open(self.temp_dir+'\\freespace.txt','r') as f:
+                            self.log(Level.INFO, ' '.join([self.path_to_undark,'-i', dbPath, '--freespace >']))
+                            self.log(Level.INFO, "called undark")
+                            line = f.readline()
+                            while line:
+                                self.log(Level.INFO, "opened result")
+                                art = file.newArtifact(self.art_freespace.getTypeID())
+                                art.addAttribute(BlackboardAttribute(self.att_rec_row, YourPhoneIngestModuleFactory.moduleName, str(line)))
+                                self.index_artifact(blackboard, art,self.art_freespace)
+                                line = f.readline()
+                    except Exception as e:
+                        self.log(Level.SEVERE, str(e))
+                        pass
             except Exception as e:
-                self.log(Level.INFO, "failed to open of the the csv files generated, starting next one")
-                pass
+                self.log(Level.SEVERE, str(e))
+                continue
             finally:
-                os.remove(self.temp_dir+'\\'+'contacts.csv')
-                os.remove(self.temp_dir+'\\'+'messages.csv')
+                dbConn.close()
                 os.remove(dbPath)
             try:
                 full_path = (file.getParentPath() + file.getName()) 
@@ -261,6 +261,40 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 continue
             
         return IngestModule.ProcessResult.OK   
+
+
+    def processMessages(self, messages,file,blackboard,skCase):
+        try:
+            while messages.next():
+                art = file.newArtifact(self.art_messages.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('thread_id').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('message_id').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, messages.getString('recipient_list').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, messages.getString('from_address').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, messages.getString('display_name').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, messages.getString('body').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, messages.getString('status').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, messages.getString('timestamp').decode('utf-8')))
+                self.index_artifact(blackboard, art,self.art_messages)
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+            return None
+                
+    def processContacts(self, contacts,file,blackboard,skCase):
+        try:
+            while contacts.next():
+                art = file.newArtifact(self.art_contacts.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, contacts.getString('contact_id').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, contacts.getString('address').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, contacts.getString('display_name').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, self.address_types[contacts.getString('address_type').decode('utf-8')]))
+                art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, contacts.getString('times_contacted').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_last_contacted_time, YourPhoneIngestModuleFactory.moduleName, contacts.getString('last_contacted_time').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, contacts.getString('last_updated_time').decode('utf-8')))
+                self.index_artifact(blackboard, art,self.art_contacts)
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+            return None
 
 class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
     serialVersionUID = 1L

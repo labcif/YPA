@@ -25,6 +25,7 @@ from org.python.core.util import StringUtil
 from java.lang import Class
 from java.lang import System
 from java.sql import DriverManager, SQLException
+from org.sqlite import SQLiteConfig
 from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.datamodel import SleuthkitCase
@@ -202,8 +203,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             ContentUtils.writeToFile(file, File(dbPath))
             try:
                 Class.forName("org.sqlite.JDBC").newInstance()
+                config = SQLiteConfig();
+                config.setEncoding(SQLiteConfig.Encoding.UTF8);
                 dbConn = DriverManager.getConnection(
-                    "jdbc:sqlite:%s" % dbPath)
+                    "jdbc:sqlite:%s" % dbPath, config.toProperties())
             except Exception as e:
                 self.log(Level.INFO, "Could not open database file (not SQLite) " +
                          file.getName() + " (" + str(e) + ")")
@@ -237,7 +240,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 continue
             finally:
                 dbConn.close()
-                os.remove(dbPath)
+                try:
+                    os.remove(dbPath)
+                except (Exception, OSError) as e:
+                    self.log(Level.SEVERE, str(e))
             try:
                 full_path = (file.getParentPath() + file.getName()) 
                 split = full_path.split('/')
@@ -267,14 +273,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         try:
             while messages.next():
                 art = file.newArtifact(self.art_messages.getTypeID())
-                art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('thread_id').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('message_id').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, messages.getString('recipient_list').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, messages.getString('from_address').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, messages.getString('display_name').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, messages.getString('body').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, messages.getString('status').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, messages.getString('timestamp').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('thread_id')))
+                art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('message_id')))
+                art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, messages.getString('recipient_list')))
+                art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, messages.getString('from_address')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, messages.getString('display_name')))
+                art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, messages.getString('body')))
+                art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, messages.getString('status')))
+                art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, messages.getString('timestamp')))
                 self.index_artifact(blackboard, art,self.art_messages)
         except Exception as e:
             self.log(Level.SEVERE, str(e))
@@ -284,13 +290,13 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         try:
             while contacts.next():
                 art = file.newArtifact(self.art_contacts.getTypeID())
-                art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, contacts.getString('contact_id').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, contacts.getString('address').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, contacts.getString('display_name').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, self.address_types[contacts.getString('address_type').decode('utf-8')]))
-                art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, contacts.getString('times_contacted').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_last_contacted_time, YourPhoneIngestModuleFactory.moduleName, contacts.getString('last_contacted_time').decode('utf-8')))
-                art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, contacts.getString('last_updated_time').decode('utf-8')))
+                art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, contacts.getString('contact_id')))
+                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, contacts.getString('address')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, contacts.getString('display_name')))
+                art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, self.address_types[contacts.getString('address_type')]))
+                art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, contacts.getString('times_contacted')))
+                art.addAttribute(BlackboardAttribute(self.att_last_contacted_time, YourPhoneIngestModuleFactory.moduleName, contacts.getString('last_contacted_time')))
+                art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, contacts.getString('last_updated_time')))
                 self.index_artifact(blackboard, art,self.art_contacts)
         except Exception as e:
             self.log(Level.SEVERE, str(e))

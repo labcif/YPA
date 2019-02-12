@@ -26,6 +26,7 @@ COLLAPSE_PREFIX = "collapsechat"
 HTML_COLLAPSE_PREFIX = "#" + COLLAPSE_PREFIX
 MODAL_PREFIX = "modal"
 HTML_MODAL_PREFIX = "#" + MODAL_PREFIX
+CONVERSATION_PREFIX = "chat"
 SELF_MESSAGE_DEFAULT = "n/a (self)"
 SELF_USER = "Self"
 NUM_ARTIFACTS_PROGRESS = 10
@@ -76,14 +77,14 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         span_time = html_file.new_tag("span")
 
         if from_user == None or from_user == SELF_MESSAGE_DEFAULT:
-            div_msg['class'] = "container darker text-right"
+            div_msg['class'] = "container darker"
             from_user = SELF_USER
-            span_time['class'] = "time-right"
+            span_time['class'] = "time-left"
         else:
-            div_msg['class'] = "container"
+            div_msg['class'] = "container text-right"
             div_msg['data-toggle'] = "modal"
             div_msg['data-target'] = HTML_MODAL_PREFIX + address.replace('+','plus')
-            span_time['class'] = "time-left"
+            span_time['class'] = "time-right"
 
 
         p_sender = html_file.new_tag("p")
@@ -109,6 +110,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         a_chat = html_file.new_tag("a")
         a_chat['class'] = "list-group-item list-group-item-action bg-light"
         a_chat['data-toggle'] = "collapse"
+        a_chat['id'] = CONVERSATION_PREFIX + thread_id
         a_chat['href'] = html_chat_id
         a_chat.string = chat_id
 
@@ -174,6 +176,17 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         html_body = html_file.select("#page-content-wrapper")[0]
         html_body.append(div_modal)
 
+    def add_total_msgs_to_chat(self, html_file, thread_id, num_msgs):
+        conversation = html_file.select("#" + CONVERSATION_PREFIX + thread_id)[0]
+        i_total_messages = html_file.new_tag("i")
+        i_total_messages.string = " - " + str(num_msgs) + " messages" 
+        conversation.append(i_total_messages)
+
+    def increment_progress_bar(self, progressBar, art_count):
+        if art_count % NUM_ARTIFACTS_PROGRESS == 0:
+            progressBar.increment()
+        return art_count + 1
+
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
     # The 'progressBar' object is of type ReportProgressPanel.
     #   See: http://sleuthkit.org/autopsy/docs/api-docs/4.4/classorg_1_1sleuthkit_1_1autopsy_1_1report_1_1_report_progress_panel.html
@@ -238,27 +251,31 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             id_for_contact = artifact.getAttribute(att_address).getDisplayString()
             self.add_contact_modal(html_ypa, artifact, id_for_contact)
 
-        list_thread_ids = []
-        art_count = 0
+            art_count = self.increment_progress_bar(progressBar, art_count)
+
+        dict_thread_ids = {}
         for artifact in art_list_messages:
             thread_id = artifact.getAttribute(att_thread_id).getValueString()
             display_name = artifact.getAttribute(att_display_name).getValueString()
             chat_name = artifact.getAttribute(att_recipient_list).getValueString()
             address = artifact.getAttribute(att_from_address).getValueString()
             sender = display_name + " (" + address + ")"
-            if thread_id not in list_thread_ids:
+            if not dict_thread_ids.get(thread_id):
                 # Create Chat
-                list_thread_ids.append(thread_id)
+                dict_thread_ids[thread_id] = 1
                 self.add_chat_to_html_report(html_ypa, chat_name, thread_id)
+            else:
+                dict_thread_ids[thread_id] += 1
 
             # Add message
             body = artifact.getAttribute(att_body).getValueString()
             timestamp = artifact.getAttribute(att_timestamp).getValueString()
             self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address)
 
-            art_count += 1
-            if art_count % NUM_ARTIFACTS_PROGRESS == 0:
-                progressBar.increment()
+            art_count = self.increment_progress_bar(progressBar, art_count)
+
+        for (t_id, num_msgs) in dict_thread_ids.iteritems():
+            self.add_total_msgs_to_chat(html_ypa, t_id, num_msgs)
 
         progressBar.updateStatusLabel("Saving report")
 

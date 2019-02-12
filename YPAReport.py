@@ -176,11 +176,17 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         html_body = html_file.select("#page-content-wrapper")[0]
         html_body.append(div_modal)
 
-    def add_total_msgs_to_chat(self, html_file, thread_id, num_msgs):
+    def add_total_msgs_to_chat(self, html_file, thread_id, num_msgs, timestamp):
         conversation = html_file.select("#" + CONVERSATION_PREFIX + thread_id)[0]
         i_total_messages = html_file.new_tag("i")
-        i_total_messages.string = " - " + str(num_msgs) + " messages" 
+        i_total_messages.string = " - " + str(num_msgs) + " messages"
+
+        span_time = html_file.new_tag("span")
+        span_time['class'] = "time-left"
+        span_time.string = timestamp
+
         conversation.append(i_total_messages)
+        conversation.append(span_time)
 
     def increment_progress_bar(self, progressBar, art_count):
         if art_count % NUM_ARTIFACTS_PROGRESS == 0:
@@ -255,27 +261,30 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         dict_thread_ids = {}
         for artifact in art_list_messages:
+            # Overall chat details
             thread_id = artifact.getAttribute(att_thread_id).getValueString()
             display_name = artifact.getAttribute(att_display_name).getValueString()
             chat_name = artifact.getAttribute(att_recipient_list).getValueString()
             address = artifact.getAttribute(att_from_address).getValueString()
             sender = display_name + " (" + address + ")"
-            if not dict_thread_ids.get(thread_id):
-                # Create Chat
-                dict_thread_ids[thread_id] = 1
-                self.add_chat_to_html_report(html_ypa, chat_name, thread_id)
-            else:
-                dict_thread_ids[thread_id] += 1
 
-            # Add message
+            # Message details
             body = artifact.getAttribute(att_body).getValueString()
             timestamp = artifact.getAttribute(att_timestamp).getValueString()
+            if not dict_thread_ids.get(thread_id):
+                # Create Chat
+                dict_thread_ids[thread_id] = [1, timestamp]
+                self.add_chat_to_html_report(html_ypa, chat_name, thread_id)
+            else:
+                dict_thread_ids[thread_id][0] += 1
+                dict_thread_ids[thread_id][1] = timestamp
+
             self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address)
 
             art_count = self.increment_progress_bar(progressBar, art_count)
 
-        for (t_id, num_msgs) in dict_thread_ids.iteritems():
-            self.add_total_msgs_to_chat(html_ypa, t_id, num_msgs)
+        for (t_id, t_list) in dict_thread_ids.iteritems():
+            self.add_total_msgs_to_chat(html_ypa, t_id, t_list[0], t_list[1])
 
         progressBar.updateStatusLabel("Saving report")
 

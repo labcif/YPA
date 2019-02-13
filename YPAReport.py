@@ -279,15 +279,15 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         att_from_address = skCase.getAttributeType("YPA_FROM_ADDRESS")
         att_address = skCase.getAttributeType("YPA_ADDRESS")
         att_recipient_list = skCase.getAttributeType("YPA_RECIPIENT_LIST")
-        att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
+        att_last_contacted = skCase.getAttributeType("YPA_LAST_CONTACT_TIME")
 
         art_count = 0
         for artifact in art_list_contacts:
             id_for_contact = artifact.getAttribute(att_address).getDisplayString()
-            last_updated = artifact.getAttribute(att_last_updated).getDisplayString()
+            last_contacted = artifact.getAttribute(att_last_contacted).getDisplayString()
             display_name = artifact.getAttribute(att_display_name).getDisplayString() + " (" + id_for_contact + ")"
             self.add_contact_modal(html_ypa, artifact, id_for_contact)
-            self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_updated)
+            self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
 
             art_count = self.increment_progress_bar(progressBar, art_count)
 

@@ -66,7 +66,7 @@
               overflow-x: hidden;
             }
 
-            #sidebar-wrapper {
+            .sidebar-wrapper {
               min-height: 100vh;
               margin-left: -15rem;
               -webkit-transition: margin .25s ease-out;
@@ -75,12 +75,12 @@
               transition: margin .25s ease-out;
             }
 
-            #sidebar-wrapper .sidebar-heading {
+            .sidebar-wrapper .sidebar-heading {
               padding: 0.875rem 1.25rem;
               font-size: 1.2rem;
             }
 
-            #sidebar-wrapper .list-group {
+            .sidebar-wrapper .list-group {
               width: 15rem;
             }
 
@@ -88,12 +88,12 @@
               min-width: 100vw;
             }
 
-            #wrapper.toggled #sidebar-wrapper {
+            #wrapper.toggled .sidebar-wrapper {
               margin-left: 0;
             }
 
             @media (min-width: 768px) {
-              #sidebar-wrapper {
+              .sidebar-wrapper {
                 margin-left: 0;
               }
 
@@ -102,20 +102,41 @@
                 width: 100%;
               }
 
-              #wrapper.toggled #sidebar-wrapper {
+              #wrapper.toggled .sidebar-wrapper {
                 margin-left: -15rem;
               }
             }
         </style>
     </head>
     <body>
+        <nav class="navbar navbar-expand-lg navbar-light bg-light">
+          <a class="navbar-brand" href="#">Your Phone Analyzer</a>
+          <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav">
+              <li class="nav-item">
+                <a class="nav-link" data-toggle="collapse" data-target="#sidebar-wrapper" role="button">Conversations</a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" data-toggle="collapse" data-target="#sidebar-wrapper-2">Address book</a>
+              </li>
+            </ul>
+          </div>
+        </nav>
         <div class="d-flex" id="wrapper">
 
-            <!-- Sidebar -->
-            <div class="bg-light border-right" id="sidebar-wrapper">
-                <div class="sidebar-heading"><b>Conversations</b></div>
-                <div class="list-group list-group-flush" id="sidebar-chats">
-                    <!-- Sidebar chats go here -->
+            <!-- Sidebars -->
+            <div id="accordion">
+                <div class="collapse show bg-light border-right sidebar-wrapper" id="sidebar-wrapper" data-parent="#accordion">
+                    <div class="sidebar-heading"><b>Conversations</b></div>
+                    <div class="list-group list-group-flush" id="sidebar-chats">
+                        <!-- Sidebar chats go here -->
+                    </div>
+                </div>
+                <div class="collapse show bg-light border-right sidebar-wrapper" id="sidebar-wrapper-2" data-parent="#accordion">
+                    <div class="sidebar-heading"><b>Address book</b></div>
+                    <div class="list-group list-group-flush" id="sidebar-contacts">
+                        <!-- Sidebar contacts go here -->
+                    </div>
                 </div>
             </div>
             <!-- /#sidebar-wrapper -->

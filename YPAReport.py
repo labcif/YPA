@@ -71,6 +71,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         return row
 
+    def get_sanitized_address(self, address):
+        return address.replace('+','plus')
+
     def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user, address):
         html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
         div_msg = html_file.new_tag("div")
@@ -83,7 +86,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         else:
             div_msg['class'] = "container text-right"
             div_msg['data-toggle'] = "modal"
-            div_msg['data-target'] = HTML_MODAL_PREFIX + address.replace('+','plus')
+            div_msg['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address)
             span_time['class'] = "time-right"
 
 
@@ -129,7 +132,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def add_contact_modal(self, html_file, artifact, id):
         div_modal = html_file.new_tag("div")
         div_modal['class'] = "modal fade"
-        div_modal['id'] = MODAL_PREFIX + id.replace('+','plus')
+        div_modal['id'] = MODAL_PREFIX + self.get_sanitized_address(id)
         div_modal['role'] = "dialog"
         div_modal['tabindex'] = "-1"
 
@@ -187,6 +190,31 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         conversation.append(i_total_messages)
         conversation.append(span_time)
+
+    def add_to_contact_book(self, html_file, display_name, address, timestamp):
+        """
+                        <a class="list-group-item list-group-item-action bg-light">
+                            Vodafone (+351912048720)
+                            <span class="time-left">2019-01-28 14:17:30</span>
+                        </a>"""
+        # html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
+        # div_chat_id = COLLAPSE_PREFIX + thread_id
+        # # data-target="#modalplus351912048720" data-toggle="modal"
+
+        # Add chat to sidebar
+        a_chat = html_file.new_tag("a")
+        a_chat['class'] = "list-group-item list-group-item-action bg-light"
+        a_chat['data-toggle'] = "modal"
+        a_chat['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address)
+        a_chat.string = display_name
+
+        span_time = html_file.new_tag("span")
+        span_time['class'] = "time-left"
+        span_time.string = timestamp
+        a_chat.append(span_time)
+
+        contacts = html_file.select("#sidebar-contacts")[0]
+        contacts.append(a_chat)
 
     def increment_progress_bar(self, progressBar, art_count):
         if art_count % NUM_ARTIFACTS_PROGRESS == 0:
@@ -251,11 +279,15 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         att_from_address = skCase.getAttributeType("YPA_FROM_ADDRESS")
         att_address = skCase.getAttributeType("YPA_ADDRESS")
         att_recipient_list = skCase.getAttributeType("YPA_RECIPIENT_LIST")
+        att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
 
         art_count = 0
         for artifact in art_list_contacts:
             id_for_contact = artifact.getAttribute(att_address).getDisplayString()
+            last_updated = artifact.getAttribute(att_last_updated).getDisplayString()
+            display_name = artifact.getAttribute(att_display_name).getDisplayString() + " (" + id_for_contact + ")"
             self.add_contact_modal(html_ypa, artifact, id_for_contact)
+            self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_updated)
 
             art_count = self.increment_progress_bar(progressBar, art_count)
 

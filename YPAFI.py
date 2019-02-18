@@ -151,6 +151,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 raise IngestModuleException("EXE was not found in module folder")                   
         self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App Contacts",skCase)
         self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App SMS",skCase)
+        self.art_mms = self.create_artifact_type("YPA_MMS","Your Phone App MMS",skCase)
         self.art_pictures = self.create_artifact_type("YPA_PICTURES","Your Phone Recent Pictures",skCase)
         self.art_freespace = self.create_artifact_type("YPA_FREESPACE","Your Phone Rows Recovered",skCase)
 
@@ -169,12 +170,17 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_body = self.create_attribute_type('YPA_BODY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message Body", skCase) 
         self.att_status = self.create_attribute_type('YPA_STATUS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase)         
         self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase)      
+
+        self.att_mms_text = self.create_attribute_type('YPA_MMS_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", skCase)
+        self.att_num_of_files = self.create_attribute_type('YPA_NUM_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Number of files", skCase)
+        self.att_name_of_files = self.create_attribute_type('YPA_NAME_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Name of files", skCase)
      
         self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", skCase)
 
         self.att_rec_row = self.create_attribute_type('YPA_REC_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data recovered from unvacuumed row", skCase)
         self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, datetime(a.last_contacted_time / 10000000 - 11644473600,'unixepoch') as last_contacted_time,  datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
         self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, ifnull(m.from_address,'self') as from_address, datetime(m.timestamp/ 10000000 - 11644473600,'unixepoch') as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
+        self.mms_query = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address from mms_part mp left join mms mm on mp.message_id = mm.message_id left join mms_address ma on mp.message_id = ma.message_id left join address a on ma.address = a.address left join contact c on a.contact_id = c.contact_id where ma.address not like 'insert-address-token' "
         self.address_types = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}  
 
 
@@ -211,12 +217,19 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                          file.getName() + " (" + str(e) + ")")
                 continue
             try:
+                
                 stmt =dbConn.createStatement()
                 contacts = stmt.executeQuery(self.contact_query)
                 self.processContacts(contacts,file,blackboard,skCase)
+                
                 stmt =dbConn.createStatement()
                 messages = stmt.executeQuery(self.messages_query)
                 self.processMessages(messages,file,blackboard,skCase)
+                
+                stmt =dbConn.createStatement()
+                mms = stmt.executeQuery(self.mms_query)
+                self.processMms(mms,file,blackboard,skCase)
+                
                 if PlatformUtil.isWindowsOS():                
                     try:
                         with open(self.temp_dir+'\\freespace.txt','w') as f:
@@ -267,6 +280,55 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             
         return IngestModule.ProcessResult.OK   
 
+    def processMms(self, mms,file,blackboard,skCase):
+        try:
+            mms_obj = {}
+            while mms.next():
+                mms_id = mms.getString('message_id')
+                if mms_id not in mms_obj:
+                    mms_obj[mms_id] =[]             
+                    mms_obj[mms_id].append(mms.getString('message_id'))    # m~_id        
+                    mms_obj[mms_id].append(mms.getString('thread_id'))    # thread_id
+                    mms_obj[mms_id].append(mms.getString('display_name'))        # disp_name
+                    mms_obj[mms_id].append(mms.getString('address'))            # address
+                    mms_obj[mms_id].append('')            # text
+                    mms_obj[mms_id].append(0)         # n of multimedia
+                    mms_obj[mms_id].append([])            # names of the multimedia files
+                if mms.getString('content_type') not in ['text/plain','application/smil']:
+                
+                    mms_obj[mms_id][5] = mms_obj[mms_id][5] + 1
+                    name = mms.getString('name')
+                    if  mms.getString('name') == '':
+                        name = 'n/a'
+                    mms_obj[mms_id][6].append(name)
+                if mms.getString('content_type') == 'text/plain':
+                    try:                  
+                        name = mms.getString('text')
+
+                        if  mms.getString('text') == '':
+                            name = 'n/a'
+                        mms_obj[mms_id][4] = str(name)
+
+                    except Exception as e:
+                        pass         
+            for obj in mms_obj:   
+                mms_obj[obj][6] = ', '.join(mms_obj[obj][6])
+                mms_obj[obj][4] = 'n/a' if mms_obj[obj][4] == '' else mms_obj[obj][4]      
+                mms_obj[obj][1] = 'n/a' if mms_obj[obj][1] is None  else mms_obj[obj][1]
+                
+
+                art = file.newArtifact(self.art_mms.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][0]))
+                art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][1]))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][2]))
+                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][3]))
+                art.addAttribute(BlackboardAttribute(self.att_mms_text, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][4]))
+                art.addAttribute(BlackboardAttribute(self.att_num_of_files, YourPhoneIngestModuleFactory.moduleName, str(mms_obj[obj][5])))
+                art.addAttribute(BlackboardAttribute(self.att_name_of_files, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][6]))                
+                self.index_artifact(blackboard, art,self.art_mms)
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+            return None
 
     def processMessages(self, messages,file,blackboard,skCase):
         try:

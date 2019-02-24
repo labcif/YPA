@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Windows Your Phone</title>
+        <title>YPA - Conversations</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
 
         <style type="text/css">
@@ -56,7 +56,7 @@
               float: left;
               color: #999;
             }
-
+            
             /*!
              * Start Bootstrap - Simple Sidebar (https://startbootstrap.com/template-overviews/simple-sidebar)
              * Copyright 2013-2019 Start Bootstrap
@@ -114,10 +114,10 @@
           <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav">
               <li class="nav-item">
-                <a class="nav-link" data-toggle="collapse" data-target="#sidebar-wrapper" role="button"><b>Conversations</b></a>
+                <a class="nav-link" role="button" id="conversations"><b>Conversations</b></a>
               </li>
               <li class="nav-item">
-                <a class="nav-link" data-toggle="collapse" data-target="#sidebar-wrapper-2" role="button"><b>Address book</b></a>
+                <a class="nav-link" role="button" id="address-book"><b>Address book</b></a>
               </li>
             </ul>
           </div>
@@ -125,18 +125,10 @@
         <div class="d-flex" id="wrapper">
 
             <!-- Sidebars -->
-            <div id="accordion">
-                <div class="collapse show bg-light border-right sidebar-wrapper" id="sidebar-wrapper" data-parent="#accordion">
-                    <div class="sidebar-heading"><b>Conversations</b></div>
-                    <div class="list-group list-group-flush" id="sidebar-chats">
-                        <!-- Sidebar chats go here -->
-                    </div>
-                </div>
-                <div class="collapse show bg-light border-right sidebar-wrapper" id="sidebar-wrapper-2" data-parent="#accordion">
-                    <div class="sidebar-heading"><b>Address book</b></div>
-                    <div class="list-group list-group-flush" id="sidebar-contacts">
-                        <!-- Sidebar contacts go here -->
-                    </div>
+            <div class="bg-light border-right sidebar-wrapper" id="sidebar-wrapper">
+                <div class="sidebar-heading"><b>Conversations</b></div>
+                <div class="list-group list-group-flush" id="sidebar-chats">
+                    <!-- Sidebar chats go here -->
                 </div>
             </div>
             <!-- /#sidebar-wrapper -->

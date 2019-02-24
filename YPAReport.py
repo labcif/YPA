@@ -51,6 +51,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def getRelativeFilePath(self):
         return "YPA_" + Case.getCurrentCase().getName() + ".html"
 
+    def getRelativeFilePathAddressBook(self):
+        return "YPA_AddressBook_" + Case.getCurrentCase().getName() + ".html"
+
     def write_conversation_to_html(self, progressBar, art_count, artifact, html_file):
         row = html_file.new_tag("tr")
 
@@ -191,16 +194,24 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         conversation.append(i_total_messages)
         conversation.append(span_time)
 
-    def add_to_contact_book(self, html_file, display_name, address, timestamp):
-        """
-                        <a class="list-group-item list-group-item-action bg-light">
-                            Vodafone (+351912048720)
-                            <span class="time-left">2019-01-28 14:17:30</span>
-                        </a>"""
-        # html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
-        # div_chat_id = COLLAPSE_PREFIX + thread_id
-        # # data-target="#modalplus351912048720" data-toggle="modal"
+    def add_to_address_book(self, html_file, contact_id, list_attributes):
+        tr_address = html_file.new_tag("tr")
+        th_contact_id = html_file.new_tag("th")
+        th_contact_id['scope'] = "row"
+        th_contact_id.string = contact_id
 
+        tr_address.append(th_contact_id)
+
+        for attribute in list_attributes:
+            td = html_file.new_tag("td")
+            td.string = attribute
+
+            tr_address.append(td)
+
+        address_book = html_file.select("#address-book-table")[0]
+        address_book.append(tr_address)
+
+    def add_to_contact_book(self, html_file, display_name, address, timestamp):
         # Add chat to sidebar
         a_chat = html_file.new_tag("a")
         a_chat['class'] = "list-group-item list-group-item-action bg-light"
@@ -220,6 +231,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         if art_count % NUM_ARTIFACTS_PROGRESS == 0:
             progressBar.increment()
         return art_count + 1
+
+    def add_link_to_html_report(self, report, tag, link_to):
+        link = report.select(tag)[0]
+        link['href'] = link_to
 
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
     # The 'progressBar' object is of type ReportProgressPanel.
@@ -267,28 +282,51 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Get template path
         template_name_chats = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_chats.html")
 
+        # Get html_file_name
+        html_file_name_book = os.path.join(baseReportDir, self.getRelativeFilePathAddressBook())
+        # Get template path
+        template_name_book = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_address_book.html")
+
         with open(template_name_chats) as base_dir:
             txt = base_dir.read()
             html_ypa = bs4.BeautifulSoup(txt)
 
+        with open(template_name_book) as base_dir:
+            txt = base_dir.read()
+            html_ypa_book = bs4.BeautifulSoup(txt)
+
+        self.add_link_to_html_report(html_ypa, "#address-book", self.getRelativeFilePathAddressBook())
+        self.add_link_to_html_report(html_ypa_book, "#conversations", self.getRelativeFilePath())
+
         # Get Attribute types
         att_thread_id = skCase.getAttributeType("YPA_THREAD_ID")
-        att_display_name = skCase.getAttributeType("YPA_DISPLAY_NAME")
         att_body = skCase.getAttributeType("YPA_BODY")
         att_timestamp = skCase.getAttributeType("YPA_TIMESTAMP")
         att_from_address = skCase.getAttributeType("YPA_FROM_ADDRESS")
-        att_address = skCase.getAttributeType("YPA_ADDRESS")
         att_recipient_list = skCase.getAttributeType("YPA_RECIPIENT_LIST")
+
+        att_contact_id = skCase.getAttributeType("YPA_CONTACT_ID")
+        att_address = skCase.getAttributeType("YPA_ADDRESS")
+        att_display_name = skCase.getAttributeType("YPA_DISPLAY_NAME")
+        att_address_type = skCase.getAttributeType("YPA_ADDRESS_TYPE")
+        att_times_contacted = skCase.getAttributeType("YPA_TIMES_CONTACTED")
         att_last_contacted = skCase.getAttributeType("YPA_LAST_CONTACT_TIME")
+        att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
 
         art_count = 0
         for artifact in art_list_contacts:
+            att_list = []
+            contact_id = artifact.getAttribute(att_contact_id).getDisplayString()
             id_for_contact = artifact.getAttribute(att_address).getDisplayString()
-            last_contacted = artifact.getAttribute(att_last_contacted).getDisplayString()
-            display_name = artifact.getAttribute(att_display_name).getDisplayString() + " (" + id_for_contact + ")"
+            att_list.append(id_for_contact)
+            att_list.append(artifact.getAttribute(att_display_name).getDisplayString())
+            att_list.append(artifact.getAttribute(att_address_type).getDisplayString())
+            att_list.append(artifact.getAttribute(att_times_contacted).getDisplayString())
+            att_list.append(artifact.getAttribute(att_last_contacted).getDisplayString())
+            att_list.append(artifact.getAttribute(att_last_updated).getDisplayString())
             self.add_contact_modal(html_ypa, artifact, id_for_contact)
-            self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
-
+            # self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
+            self.add_to_address_book(html_ypa_book, contact_id, att_list)
             art_count = self.increment_progress_bar(progressBar, art_count)
 
         dict_thread_ids = {}
@@ -322,6 +360,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         with open(html_file_name, "w") as outf:
             outf.write(str(html_ypa))
+
+        with open(html_file_name_book, "w") as outf:
+            outf.write(str(html_ypa_book))
 
         Case.getCurrentCase().addReport(html_file_name, self.moduleName, "YPA Report")
 

@@ -17,9 +17,11 @@ from org.sleuthkit.autopsy.report.ReportProgressPanel import ReportStatus
 from org.sleuthkit.datamodel import AbstractFile
 
 from javax.swing import JPanel
-from javax.swing import JCheckBox
+from javax.swing import JComboBox
 from javax.swing import JLabel
-from javax.swing import BoxLayout
+from java.awt import FlowLayout
+from java.awt import BorderLayout
+from javax.swing import JFrame
 from java.awt import Color
 
 COLLAPSE_PREFIX = "collapsechat"
@@ -204,7 +206,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         for attribute in list_attributes:
             td = html_file.new_tag("td")
-            td.string = attribute
+
+            if attribute == "1970-01-01 00:00:00":
+                td.string = "---"
+            else:
+                td.string = attribute
 
             tr_address.append(td)
 
@@ -314,7 +320,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
 
         art_count = 0
-        for artifact in art_list_contacts:
+        attribute_type = self.configPanel.getAttTypeList()[self.configPanel.getSelectedAddressBookOrderIndex()]
+        for artifact in sorted(art_list_contacts, key = lambda (a): a.getAttribute(attribute_type).getDisplayString()):
             att_list = []
             contact_id = artifact.getAttribute(att_contact_id).getDisplayString()
             id_for_contact = artifact.getAttribute(att_address).getDisplayString()
@@ -394,13 +401,43 @@ class LFA_ConfigPanel(JPanel):
     def __init__(self):
         self.initComponents()
 
+    def getSelectedAddressBookOrderIndex(self):
+        return self.orderComboBox.getSelectedIndex()
+
+    def getAttTypeList(self):
+        return self.att_type_list
+
     def initComponents(self):
-        self.setLayout(BoxLayout(self, BoxLayout.Y_AXIS))
+        skCase = Case.getCurrentCase().getSleuthkitCase()
+        att_contact_id = skCase.getAttributeType("YPA_CONTACT_ID")
+        att_address = skCase.getAttributeType("YPA_ADDRESS")
+        att_display_name = skCase.getAttributeType("YPA_DISPLAY_NAME")
+        att_address_type = skCase.getAttributeType("YPA_ADDRESS_TYPE")
+        att_times_contacted = skCase.getAttributeType("YPA_TIMES_CONTACTED")
+        att_last_contacted = skCase.getAttributeType("YPA_LAST_CONTACT_TIME")
+        att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
+
+        self.att_type_list = [att_contact_id, att_address, att_display_name, att_address_type, att_times_contacted, att_last_updated, att_last_contacted]
+        
+        orderOptions = []
+        for att in self.att_type_list:
+            orderOptions.append(att.getDisplayName())
+        self.setLayout(FlowLayout())
 
         descriptionLabel = JLabel(" YPA - Your Phone Analyzer (Report module)")
         self.add(descriptionLabel)
 
-        skCase = Case.getCurrentCase().getSleuthkitCase()
+        orderLabel = JLabel("Address book order: ")
+        self.add(orderLabel)
+
+        self.orderComboBox = JComboBox(orderOptions)
+        self.add(self.orderComboBox)
+
+        pnl = JPanel()
+        pnl.add(self.orderComboBox)
+        self.add(pnl)
+
+
         art_count = len(skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_%'"))
         if art_count == 0:
             warningLabel = JLabel(" WARNING: Please run the ingest module before this report module.")

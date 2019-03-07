@@ -6,6 +6,7 @@ import subprocess
 import time
 import json
 import sys
+import csv
 
 from javax.swing import JCheckBox
 from javax.swing import JList
@@ -21,14 +22,15 @@ from javax.swing import JScrollPane
 from javax.swing import JComponent
 from java.awt.event import KeyListener
 from org.python.core.util import StringUtil
-from Registry import Registry
 from java.lang import Class
 from java.lang import System
 from java.sql import DriverManager, SQLException
+from org.sqlite import SQLiteConfig
 from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.datamodel import SleuthkitCase
 from org.sleuthkit.datamodel import AbstractFile
+from org.sleuthkit.autopsy.casemodule.services import Blackboard
 from org.sleuthkit.datamodel import ReadContentInputStream
 from org.sleuthkit.datamodel import BlackboardArtifact
 from org.sleuthkit.datamodel import BlackboardAttribute
@@ -74,10 +76,9 @@ class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
     def hasIngestJobSettingsPanel(self):
         return True
 
-    # TODO: Update class names to ones that you create below
     def getIngestJobSettingsPanel(self, settings):
         if not isinstance(settings, YourPhoneWithUISettings):
-            raise IllegalArgumentException("Expected settings argument to be instanceof SampleIngestModuleSettings")
+            raise IllegalArgumentException("Expected settings argument to be instanceof YourPhoneWithUISettings")
         self.settings = settings
         return YourPhoneWithUISettingsPanel(self.settings)
 
@@ -123,7 +124,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def create_artifact_type(self, art_name, art_desc, skCase):
         try:
-            skCase.addBlackboardArtifactType(art_name, "WTA: " + art_desc)
+            skCase.addBlackboardArtifactType(art_name, "YPA: " + art_desc)
         except:
             self.log(Level.INFO, "ERROR creating artifact type: " + art_desc)
         art = skCase.getArtifactType(art_name)
@@ -141,12 +142,52 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     # 'context' is an instance of org.sleuthkit.autopsy.ingest.IngestJobContext.
     # See: http://sleuthkit.org/autopsy/docs/api-docs/3.1/classorg_1_1sleuthkit_1_1autopsy_1_1ingest_1_1_ingest_job_context.html
     def startUp(self, context):
+        skCase = Case.getCurrentCase().getSleuthkitCase()
         self.temp_dir = Case.getCurrentCase().getTempDirectory()
         if PlatformUtil.isWindowsOS():
-            self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "read_ypa.exe")
-            if not os.path.exists(self.path_to_exe):
-                raise IngestModuleException("EXE was not found in module folder")
-   
+            #self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ypa.exe") #OLD
+            self.path_to_undark = os.path.join(os.path.dirname(os.path.abspath(__file__)), "undark.exe")
+            if not os.path.exists(self.path_to_undark):
+                raise IngestModuleException("EXE was not found in module folder")                   
+        self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App Contacts",skCase)
+        self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App SMS",skCase)
+        self.art_mms = self.create_artifact_type("YPA_MMS","Your Phone App MMS",skCase)
+        self.art_pictures = self.create_artifact_type("YPA_PICTURES","Your Phone Recent Pictures",skCase)
+        self.art_freespace = self.create_artifact_type("YPA_FREESPACE","Your Phone Rows Recovered",skCase)
+
+        self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
+        self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
+        self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase)
+        self.att_address_type = self.create_attribute_type('YPA_ADDRESS_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address type", skCase)
+        self.att_times_contacted = self.create_attribute_type('YPA_TIMES_CONTACTED', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Times contacted", skCase)
+        self.att_last_contacted_time = self.create_attribute_type('YPA_LAST_CONTACT_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last contacted time", skCase) 
+        self.att_last_updated_time = self.create_attribute_type('YPA_LAST_UPDATE_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last updated time", skCase) 
+
+        self.att_thread_id = self.create_attribute_type('YPA_THREAD_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Thread id", skCase) 
+        self.att_message_id = self.create_attribute_type('YPA_MESSAGE_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message id", skCase) 
+        self.att_recipient_list = self.create_attribute_type('YPA_RECIPIENT_LIST', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Recipients", skCase) 
+        self.att_from_address = self.create_attribute_type('YPA_FROM_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING , "Address", skCase) 
+        self.att_body = self.create_attribute_type('YPA_BODY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message Body", skCase) 
+        self.att_status = self.create_attribute_type('YPA_STATUS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase)         
+        self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase)      
+
+        self.att_mms_text = self.create_attribute_type('YPA_MMS_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", skCase)
+        self.att_num_of_files = self.create_attribute_type('YPA_NUM_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Number of files", skCase)
+        self.att_name_of_files = self.create_attribute_type('YPA_NAME_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Name of files", skCase)
+     
+        self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", skCase)
+
+        self.att_rec_row = self.create_attribute_type('YPA_REC_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data recovered from unvacuumed row", skCase)
+        self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, datetime(a.last_contacted_time / 10000000 - 11644473600,'unixepoch') as last_contacted_time,  datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
+        self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, ifnull(m.from_address,'self') as from_address, datetime(m.timestamp/ 10000000 - 11644473600,'unixepoch') as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
+        self.mms_query = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address from mms_part mp left join mms mm on mp.message_id = mm.message_id left join mms_address ma on mp.message_id = ma.message_id left join address a on ma.address = a.address left join contact c on a.contact_id = c.contact_id where ma.address not like 'insert-address-token' "
+        self.address_types = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}  
+
+
+        
+        
+
+        
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
     # See: http://www.sleuthkit.org/sleuthkit/docs/jni-docs/interfaceorg_1_1sleuthkit_1_1datamodel_1_1_content.html
@@ -157,19 +198,172 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         blackboard = Case.getCurrentCase().getServices().getBlackboard()
         skCase = Case.getCurrentCase().getSleuthkitCase()
         fileManager = Case.getCurrentCase().getServices().getFileManager()
-        files = fileManager.findFiles(dataSource, "ActivitiesCache.db") #TODO:change name
+        
+        files = fileManager.findFiles(dataSource, "phone.db") 
         numFiles = len(files)
         self.log(Level.INFO, "found " + str(numFiles) + " files")
         fileCount = 0
         for file in files:
-            dbPath = os.path.join(self.temp_dir + "\YPA", str(file.getId()))
+            dbPath = os.path.join(self.temp_dir , str(file.getName()))
             ContentUtils.writeToFile(file, File(dbPath))
-
-
-        
+            try:
+                Class.forName("org.sqlite.JDBC").newInstance()
+                config = SQLiteConfig();
+                config.setEncoding(SQLiteConfig.Encoding.UTF8);
+                dbConn = DriverManager.getConnection(
+                    "jdbc:sqlite:%s" % dbPath, config.toProperties())
+            except Exception as e:
+                self.log(Level.INFO, "Could not open database file (not SQLite) " +
+                         file.getName() + " (" + str(e) + ")")
+                continue
+            try:
+                
+                stmt =dbConn.createStatement()
+                contacts = stmt.executeQuery(self.contact_query)
+                self.processContacts(contacts,file,blackboard,skCase)
+                
+                stmt =dbConn.createStatement()
+                messages = stmt.executeQuery(self.messages_query)
+                self.processMessages(messages,file,blackboard,skCase)
+                
+                stmt =dbConn.createStatement()
+                mms = stmt.executeQuery(self.mms_query)
+                self.processMms(mms,file,blackboard,skCase)
+                
+                if PlatformUtil.isWindowsOS():                
+                    try:
+                        with open(self.temp_dir+'\\freespace.txt','w') as f:
+                            subprocess.Popen([self.path_to_undark,'-i', dbPath, '--freespace'],stdout=f).communicate()
+                        with open(self.temp_dir+'\\freespace.txt','r') as f:
+                            self.log(Level.INFO, ' '.join([self.path_to_undark,'-i', dbPath, '--freespace >']))
+                            self.log(Level.INFO, "called undark")
+                            line = f.readline()
+                            while line:
+                                self.log(Level.INFO, "opened result")
+                                art = file.newArtifact(self.art_freespace.getTypeID())
+                                art.addAttribute(BlackboardAttribute(self.att_rec_row, YourPhoneIngestModuleFactory.moduleName, str(line)))
+                                self.index_artifact(blackboard, art,self.art_freespace)
+                                line = f.readline()
+                    except Exception as e:
+                        self.log(Level.SEVERE, str(e))
+                        pass
+            except Exception as e:
+                self.log(Level.SEVERE, str(e))
+                continue
+            finally:
+                dbConn.close()
+                try:
+                    os.remove(dbPath)
+                except (Exception, OSError) as e:
+                    self.log(Level.SEVERE, str(e))
+            try:
+                full_path = (file.getParentPath() + file.getName()) 
+                split = full_path.split('/')
+                guidPath = '/'.join(split[:-3])
+                usrPath = guidPath+'/User'       
+                self.log(Level.INFO, usrPath)
+                ufiles = fileManager.findFiles(dataSource, '%', usrPath)
+                self.log(Level.INFO, ufiles[0].getName())
+                for ufile in ufiles:
+                    rpPath = ufile.getParentPath() + ufile.getName() +'/Recent Photos/' 
+                    picfiles = fileManager.findFiles(dataSource, '%', rpPath)
+                    for pic in picfiles:
+                        self.log(Level.INFO, pic.getName())
+                        # Make an artifact
+                        art = pic.newArtifact(self.art_pictures.getTypeID())
+                                    # Register file size
+                        art.addAttribute(BlackboardAttribute(self.att_pic_size, YourPhoneIngestModuleFactory.moduleName, pic.getSize()))
+                        self.index_artifact(blackboard, art, self.art_pictures)
+            except Exception as e:
+                self.log(Level.INFO, "failed to open of the the csv files generated, starting next one")
+                continue
+            
         return IngestModule.ProcessResult.OK   
 
-class YourPhoneWithUISettings(IngestModuleIngestJobSettings): #these are just in case we end up needing an UI
+    def processMms(self, mms,file,blackboard,skCase):
+        try:
+            mms_obj = {}
+            while mms.next():
+                mms_id = mms.getString('message_id')
+                if mms_id not in mms_obj:
+                    mms_obj[mms_id] =[]             
+                    mms_obj[mms_id].append(mms.getString('message_id'))    # m~_id        
+                    mms_obj[mms_id].append(mms.getString('thread_id'))    # thread_id
+                    mms_obj[mms_id].append(mms.getString('display_name'))        # disp_name
+                    mms_obj[mms_id].append(mms.getString('address'))            # address
+                    mms_obj[mms_id].append('')            # text
+                    mms_obj[mms_id].append(0)         # n of multimedia
+                    mms_obj[mms_id].append([])            # names of the multimedia files
+                if mms.getString('content_type') not in ['text/plain','application/smil']:
+                
+                    mms_obj[mms_id][5] = mms_obj[mms_id][5] + 1
+                    name = mms.getString('name')
+                    if  mms.getString('name') == '':
+                        name = 'n/a'
+                    mms_obj[mms_id][6].append(name)
+                if mms.getString('content_type') == 'text/plain':
+                    try:                  
+                        name = mms.getString('text')
+
+                        if  mms.getString('text') == '':
+                            name = 'n/a'
+                        mms_obj[mms_id][4] = str(name)
+
+                    except Exception as e:
+                        pass         
+            for obj in mms_obj:   
+                mms_obj[obj][6] = ', '.join(mms_obj[obj][6])
+                mms_obj[obj][4] = 'n/a' if mms_obj[obj][4] == '' else mms_obj[obj][4]      
+                mms_obj[obj][1] = 'n/a' if mms_obj[obj][1] is None  else mms_obj[obj][1]
+                
+
+                art = file.newArtifact(self.art_mms.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][0]))
+                art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][1]))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][2]))
+                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][3]))
+                art.addAttribute(BlackboardAttribute(self.att_mms_text, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][4]))
+                art.addAttribute(BlackboardAttribute(self.att_num_of_files, YourPhoneIngestModuleFactory.moduleName, str(mms_obj[obj][5])))
+                art.addAttribute(BlackboardAttribute(self.att_name_of_files, YourPhoneIngestModuleFactory.moduleName, mms_obj[obj][6]))                
+                self.index_artifact(blackboard, art,self.art_mms)
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+            return None
+
+    def processMessages(self, messages,file,blackboard,skCase):
+        try:
+            while messages.next():
+                art = file.newArtifact(self.art_messages.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('thread_id')))
+                art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('message_id')))
+                art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, messages.getString('recipient_list')))
+                art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, messages.getString('from_address')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, messages.getString('display_name')))
+                art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, messages.getString('body')))
+                art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, messages.getString('status')))
+                art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, messages.getString('timestamp')))
+                self.index_artifact(blackboard, art,self.art_messages)
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+            return None
+                
+    def processContacts(self, contacts,file,blackboard,skCase):
+        try:
+            while contacts.next():
+                art = file.newArtifact(self.art_contacts.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, contacts.getString('contact_id')))
+                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, contacts.getString('address')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, contacts.getString('display_name')))
+                art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, self.address_types[contacts.getString('address_type')]))
+                art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, contacts.getString('times_contacted')))
+                art.addAttribute(BlackboardAttribute(self.att_last_contacted_time, YourPhoneIngestModuleFactory.moduleName, contacts.getString('last_contacted_time')))
+                art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, contacts.getString('last_updated_time')))
+                self.index_artifact(blackboard, art,self.art_contacts)
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+            return None
+
+class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
     serialVersionUID = 1L
     
     def __init__(self):
@@ -200,10 +394,9 @@ class YourPhoneWithUISettings(IngestModuleIngestJobSettings): #these are just in
         self.flag2 = flag2
 
 # UI that is shown to user for each ingest job so they can configure the job.
-# TODO: Rename this
 
 
-class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel): #these are just in case we end up needing an UI
+class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel): # These are just in case we end up needing an UI
     # Note, we can't use a self.settings instance variable.
     # Rather, self.local_settings is used.
     # https://wiki.python.org/jython/UserGuide#javabean-properties

@@ -17,14 +17,25 @@ from org.sleuthkit.autopsy.report.ReportProgressPanel import ReportStatus
 from org.sleuthkit.datamodel import AbstractFile
 
 from javax.swing import JPanel
-from javax.swing import JCheckBox
+from javax.swing import JComboBox
 from javax.swing import JLabel
-from javax.swing import BoxLayout
+from java.awt import FlowLayout
+from java.awt import BorderLayout
+from javax.swing import JFrame
 from java.awt import Color
+
+COLLAPSE_PREFIX = "collapsechat"
+HTML_COLLAPSE_PREFIX = "#" + COLLAPSE_PREFIX
+MODAL_PREFIX = "modal"
+HTML_MODAL_PREFIX = "#" + MODAL_PREFIX
+CONVERSATION_PREFIX = "chat"
+SELF_MESSAGE_DEFAULT = "n/a (self)"
+SELF_USER = "Self"
+NUM_ARTIFACTS_PROGRESS = 10
 
 class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
-    moduleName = "Your Phone Analyzer Report"
+    moduleName = "YPA Report"
 
     _logger = None
 
@@ -41,6 +52,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
     def getRelativeFilePath(self):
         return "YPA_" + Case.getCurrentCase().getName() + ".html"
+
+    def getRelativeFilePathAddressBook(self):
+        return "YPA_AddressBook_" + Case.getCurrentCase().getName() + ".html"
 
     def write_conversation_to_html(self, progressBar, art_count, artifact, html_file):
         row = html_file.new_tag("tr")
@@ -62,15 +76,24 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         return row
 
-    def add_msg_to_html_report(self, html_file, chat_id, body, time, from_user):
-        html_chat_id = "#" + chat_id
-        div_msg = html_file.new_tag("div")
+    def get_sanitized_address(self, address):
+        return address.replace('+','plus')
 
-        if from_user == None:
+    def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user, address):
+        html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
+        div_msg = html_file.new_tag("div")
+        span_time = html_file.new_tag("span")
+
+        if from_user == None or from_user == SELF_MESSAGE_DEFAULT:
             div_msg['class'] = "container darker"
-            from_user = "You"
+            from_user = SELF_USER
+            span_time['class'] = "time-left"
         else:
-            div_msg['class'] = "container"
+            div_msg['class'] = "container text-right"
+            div_msg['data-toggle'] = "modal"
+            div_msg['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address)
+            span_time['class'] = "time-right"
+
 
         p_sender = html_file.new_tag("p")
         p_bold_sender = html_file.new_tag("b")
@@ -78,9 +101,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         p_sender.append(p_bold_sender)
         p_msg_body = html_file.new_tag("p")
         p_msg_body.string = body
-        span_time = html_file.new_tag("span")
-        span_time['class'] = "time-left"
-        span_time.string = time
+        span_time.string = timestamp
 
         div_msg.append(p_sender)
         div_msg.append(p_msg_body)
@@ -89,13 +110,15 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         chat = html_file.select(html_chat_id)[0]
         chat.append(div_msg)
 
-    def add_chat_to_html_report(self, html_file, chat_id):
-        html_chat_id = "#" + chat_id
+    def add_chat_to_html_report(self, html_file, chat_id, thread_id):
+        html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
+        div_chat_id = COLLAPSE_PREFIX + thread_id
 
         # Add chat to sidebar
         a_chat = html_file.new_tag("a")
         a_chat['class'] = "list-group-item list-group-item-action bg-light"
         a_chat['data-toggle'] = "collapse"
+        a_chat['id'] = CONVERSATION_PREFIX + thread_id
         a_chat['href'] = html_chat_id
         a_chat.string = chat_id
 
@@ -105,11 +128,115 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Add chat collapseable
         div_chat = html_file.new_tag("div")
         div_chat['class'] = "container-fluid collapse multi-collapse"
-        div_chat['id'] = chat_id
+        div_chat['id'] = div_chat_id
         div_chat['data-parent'] = "#page-content-wrapper"
 
         collapseable_chats = html_file.select("#page-content-wrapper")[0]
         collapseable_chats.append(div_chat)
+
+    def add_contact_modal(self, html_file, artifact, id):
+        div_modal = html_file.new_tag("div")
+        div_modal['class'] = "modal fade"
+        div_modal['id'] = MODAL_PREFIX + self.get_sanitized_address(id)
+        div_modal['role'] = "dialog"
+        div_modal['tabindex'] = "-1"
+
+        div_dialog = html_file.new_tag("div")
+        div_dialog['class'] = "modal-dialog"
+        div_dialog['role'] = "document"
+        div_modal.append(div_dialog)
+
+        div_content = html_file.new_tag("div")
+        div_content['class'] = "modal-content"
+        div_dialog.append(div_content)
+
+        div_header = html_file.new_tag("div")
+        div_header['class'] = "modal-header"
+        div_content.append(div_header)
+
+        h_title = html_file.new_tag("h5")
+        h_title['class'] = "modal-title"
+        h_title.string = "Contact details"
+        div_header.append(h_title)
+
+        button_close = html_file.new_tag("button")
+        button_close['class'] = "close"
+        button_close['data-dismiss'] = "modal"
+        div_header.append(button_close)
+
+        span_close = html_file.new_tag("span")
+        span_close.string = "x"
+        button_close.append(span_close)
+
+        div_body = html_file.new_tag("div")
+        div_body['class'] = "modal-body"
+
+        for attribute in artifact.getAttributes():
+            p_attribute = html_file.new_tag("p")
+            b_attribute_display = html_file.new_tag("b")
+            b_attribute_display.string = attribute.getAttributeType().getDisplayName()
+            p_attribute.string = attribute.getDisplayString()
+            div_body.append(b_attribute_display)
+            div_body.append(p_attribute)
+
+        div_content.append(div_body)
+
+        html_body = html_file.select("#page-content-wrapper")[0]
+        html_body.append(div_modal)
+
+    def add_total_msgs_to_chat(self, html_file, thread_id, num_msgs, timestamp):
+        conversation = html_file.select("#" + CONVERSATION_PREFIX + thread_id)[0]
+        i_total_messages = html_file.new_tag("i")
+        i_total_messages.string = " - " + str(num_msgs) + " messages"
+
+        span_time = html_file.new_tag("span")
+        span_time['class'] = "time-left"
+        span_time.string = timestamp
+
+        conversation.append(i_total_messages)
+        conversation.append(span_time)
+
+    def add_to_address_book(self, html_file, contact_id, list_attributes):
+        tr_address = html_file.new_tag("tr")
+        th_contact_id = html_file.new_tag("th")
+        th_contact_id['scope'] = "row"
+        th_contact_id.string = contact_id
+
+        tr_address.append(th_contact_id)
+
+        for attribute in list_attributes:
+            td = html_file.new_tag("td")
+
+            if attribute == "1970-01-01 00:00:00":
+                td.string = "---"
+            else:
+                td.string = attribute
+
+            tr_address.append(td)
+
+        address_book = html_file.select("#address-book-table")[0]
+        address_book.append(tr_address)
+
+    def add_to_contact_book(self, html_file, display_name, address, timestamp):
+        # Add chat to sidebar
+        a_chat = html_file.new_tag("a")
+        a_chat['class'] = "list-group-item list-group-item-action bg-light"
+        a_chat['data-toggle'] = "modal"
+        a_chat['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address)
+        a_chat.string = display_name
+
+        span_time = html_file.new_tag("span")
+        span_time['class'] = "time-left"
+        span_time.string = timestamp
+        a_chat.append(span_time)
+
+        contacts = html_file.select("#sidebar-contacts")[0]
+        contacts.append(a_chat)
+
+    def increment_progress_bar(self, progressBar, art_count):
+        if art_count % NUM_ARTIFACTS_PROGRESS == 0:
+            progressBar.increment()
+        return art_count + 1
 
     def add_link_to_html_report(self, report, tag, link_to):
         link = report.select(tag)[0]
@@ -133,8 +260,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
 
         # Get artifact lists
-        # art_list_reported_progs = skCase.getBlackboardArtifacts("TSK_LFA_REPORTED_PROGRAMS")
-        total_artifact_count = 1
+        art_list_messages = skCase.getBlackboardArtifacts("YPA_MESSAGE")
+        art_list_contacts = skCase.getBlackboardArtifacts("YPA_CONTACTS")
+        total_artifact_count = len(art_list_messages) + len(art_list_contacts)
+
+
 
         if total_artifact_count == 0:
             msg = "There seem to be no YPA artifacts. Did you run the ingest module? Please cancel this report and try again after the ingest module."
@@ -146,11 +276,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Dividing by ten because progress bar shouldn't be updated too frequently
         # So we'll update it every X artifacts (defined by a constant)
         # Plus 2 for 2 additional steps
-        #max_progress = (ceil(total_artifact_count / NUM_ARTIFACTS_PROGRESS) + 2)
-        #progressBar.setMaximumProgress(int(max_progress))
-
-        # Get what reports the user wants
-        # generateHTML = self.configPanel.getGenerateHTML()
+        max_progress = (ceil(total_artifact_count / NUM_ARTIFACTS_PROGRESS) + 2)
+        progressBar.setMaximumProgress(int(max_progress))
 
         # First additional step here
         progressBar.increment()
@@ -161,23 +288,88 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Get template path
         template_name_chats = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_chats.html")
 
+        # Get html_file_name
+        html_file_name_book = os.path.join(baseReportDir, self.getRelativeFilePathAddressBook())
+        # Get template path
+        template_name_book = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_address_book.html")
+
         with open(template_name_chats) as base_dir:
             txt = base_dir.read()
             html_ypa = bs4.BeautifulSoup(txt)
 
-        self.add_chat_to_html_report(html_ypa, "test")
-        self.add_msg_to_html_report(html_ypa, "test", "First!", "12:12", "User 2")
-        self.add_msg_to_html_report(html_ypa, "test", "Hello", "12:12", None)
-        self.add_msg_to_html_report(html_ypa, "test", "Hi. How are you doing?", "12:13", "User 2")
-        self.add_msg_to_html_report(html_ypa, "test", "Fine, what about you?", "12:15", None)
-        self.add_msg_to_html_report(html_ypa, "test", "Doin' great.", "12:18", "User 2")
-        self.add_chat_to_html_report(html_ypa, "test2")
-        self.add_msg_to_html_report(html_ypa, "test2", "Another one.", "12:18", None)
+        with open(template_name_book) as base_dir:
+            txt = base_dir.read()
+            html_ypa_book = bs4.BeautifulSoup(txt)
+
+        self.add_link_to_html_report(html_ypa, "#address-book", self.getRelativeFilePathAddressBook())
+        self.add_link_to_html_report(html_ypa_book, "#conversations", self.getRelativeFilePath())
+
+        # Get Attribute types
+        att_thread_id = skCase.getAttributeType("YPA_THREAD_ID")
+        att_body = skCase.getAttributeType("YPA_BODY")
+        att_timestamp = skCase.getAttributeType("YPA_TIMESTAMP")
+        att_from_address = skCase.getAttributeType("YPA_FROM_ADDRESS")
+        att_recipient_list = skCase.getAttributeType("YPA_RECIPIENT_LIST")
+
+        att_contact_id = skCase.getAttributeType("YPA_CONTACT_ID")
+        att_address = skCase.getAttributeType("YPA_ADDRESS")
+        att_display_name = skCase.getAttributeType("YPA_DISPLAY_NAME")
+        att_address_type = skCase.getAttributeType("YPA_ADDRESS_TYPE")
+        att_times_contacted = skCase.getAttributeType("YPA_TIMES_CONTACTED")
+        att_last_contacted = skCase.getAttributeType("YPA_LAST_CONTACT_TIME")
+        att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
+
+        art_count = 0
+        attribute_type = self.configPanel.getAttTypeList()[self.configPanel.getSelectedAddressBookOrderIndex()]
+        for artifact in sorted(art_list_contacts, key = lambda (a): a.getAttribute(attribute_type).getDisplayString()):
+            att_list = []
+            contact_id = artifact.getAttribute(att_contact_id).getDisplayString()
+            id_for_contact = artifact.getAttribute(att_address).getDisplayString()
+            att_list.append(id_for_contact)
+            att_list.append(artifact.getAttribute(att_display_name).getDisplayString())
+            att_list.append(artifact.getAttribute(att_address_type).getDisplayString())
+            att_list.append(artifact.getAttribute(att_times_contacted).getDisplayString())
+            att_list.append(artifact.getAttribute(att_last_contacted).getDisplayString())
+            att_list.append(artifact.getAttribute(att_last_updated).getDisplayString())
+            self.add_contact_modal(html_ypa, artifact, id_for_contact)
+            # self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
+            self.add_to_address_book(html_ypa_book, contact_id, att_list)
+            art_count = self.increment_progress_bar(progressBar, art_count)
+
+        dict_thread_ids = {}
+        for artifact in art_list_messages:
+            # Overall chat details
+            thread_id = artifact.getAttribute(att_thread_id).getValueString()
+            display_name = artifact.getAttribute(att_display_name).getValueString()
+            chat_name = artifact.getAttribute(att_recipient_list).getValueString()
+            address = artifact.getAttribute(att_from_address).getValueString()
+            sender = display_name + " (" + address + ")"
+
+            # Message details
+            body = artifact.getAttribute(att_body).getValueString()
+            timestamp = artifact.getAttribute(att_timestamp).getValueString()
+            if not dict_thread_ids.get(thread_id):
+                # Create Chat
+                dict_thread_ids[thread_id] = [1, timestamp]
+                self.add_chat_to_html_report(html_ypa, chat_name, thread_id)
+            else:
+                dict_thread_ids[thread_id][0] += 1
+                dict_thread_ids[thread_id][1] = timestamp
+
+            self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address)
+
+            art_count = self.increment_progress_bar(progressBar, art_count)
+
+        for (t_id, t_list) in dict_thread_ids.iteritems():
+            self.add_total_msgs_to_chat(html_ypa, t_id, t_list[0], t_list[1])
 
         progressBar.updateStatusLabel("Saving report")
 
         with open(html_file_name, "w") as outf:
             outf.write(str(html_ypa))
+
+        with open(html_file_name_book, "w") as outf:
+            outf.write(str(html_ypa_book))
 
         Case.getCurrentCase().addReport(html_file_name, self.moduleName, "YPA Report")
 
@@ -209,15 +401,44 @@ class LFA_ConfigPanel(JPanel):
     def __init__(self):
         self.initComponents()
 
+    def getSelectedAddressBookOrderIndex(self):
+        return self.orderComboBox.getSelectedIndex()
+
+    def getAttTypeList(self):
+        return self.att_type_list
+
     def initComponents(self):
-        self.setLayout(BoxLayout(self, BoxLayout.Y_AXIS))
+        skCase = Case.getCurrentCase().getSleuthkitCase()
+        att_contact_id = skCase.getAttributeType("YPA_CONTACT_ID")
+        att_address = skCase.getAttributeType("YPA_ADDRESS")
+        att_display_name = skCase.getAttributeType("YPA_DISPLAY_NAME")
+        att_address_type = skCase.getAttributeType("YPA_ADDRESS_TYPE")
+        att_times_contacted = skCase.getAttributeType("YPA_TIMES_CONTACTED")
+        att_last_contacted = skCase.getAttributeType("YPA_LAST_CONTACT_TIME")
+        att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
+
+        self.att_type_list = [att_contact_id, att_address, att_display_name, att_address_type, att_times_contacted, att_last_updated, att_last_contacted]
+        
+        orderOptions = []
+        for att in self.att_type_list:
+            orderOptions.append(att.getDisplayName())
+        self.setLayout(FlowLayout())
 
         descriptionLabel = JLabel(" YPA - Your Phone Analyzer (Report module)")
         self.add(descriptionLabel)
 
-        skCase = Case.getCurrentCase().getSleuthkitCase()
-        # art_count = len(skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'TSK_LFA_%'"))
-        art_count = 0
+        orderLabel = JLabel("Address book order: ")
+        self.add(orderLabel)
+
+        self.orderComboBox = JComboBox(orderOptions)
+        self.add(self.orderComboBox)
+
+        pnl = JPanel()
+        pnl.add(self.orderComboBox)
+        self.add(pnl)
+
+
+        art_count = len(skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_%'"))
         if art_count == 0:
             warningLabel = JLabel(" WARNING: Please run the ingest module before this report module.")
             warningLabel.setForeground(Color.RED)

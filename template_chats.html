@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Windows Your Phone</title>
+        <title>YPA - Conversations</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
 
         <style type="text/css">
@@ -56,7 +56,7 @@
               float: left;
               color: #999;
             }
-
+            
             /*!
              * Start Bootstrap - Simple Sidebar (https://startbootstrap.com/template-overviews/simple-sidebar)
              * Copyright 2013-2019 Start Bootstrap
@@ -66,7 +66,7 @@
               overflow-x: hidden;
             }
 
-            #sidebar-wrapper {
+            .sidebar-wrapper {
               min-height: 100vh;
               margin-left: -15rem;
               -webkit-transition: margin .25s ease-out;
@@ -75,12 +75,12 @@
               transition: margin .25s ease-out;
             }
 
-            #sidebar-wrapper .sidebar-heading {
+            .sidebar-wrapper .sidebar-heading {
               padding: 0.875rem 1.25rem;
               font-size: 1.2rem;
             }
 
-            #sidebar-wrapper .list-group {
+            .sidebar-wrapper .list-group {
               width: 15rem;
             }
 
@@ -88,12 +88,12 @@
               min-width: 100vw;
             }
 
-            #wrapper.toggled #sidebar-wrapper {
+            #wrapper.toggled .sidebar-wrapper {
               margin-left: 0;
             }
 
             @media (min-width: 768px) {
-              #sidebar-wrapper {
+              .sidebar-wrapper {
                 margin-left: 0;
               }
 
@@ -102,18 +102,31 @@
                 width: 100%;
               }
 
-              #wrapper.toggled #sidebar-wrapper {
+              #wrapper.toggled .sidebar-wrapper {
                 margin-left: -15rem;
               }
             }
         </style>
     </head>
     <body>
+        <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+          <a class="navbar-brand" href="#">'Your Phone' Analyzer</a>
+          <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav">
+              <li class="nav-item">
+                <a class="nav-link" role="button" id="conversations"><b>Conversations</b></a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" role="button" id="address-book"><b>Address book</b></a>
+              </li>
+            </ul>
+          </div>
+        </nav>
         <div class="d-flex" id="wrapper">
 
-            <!-- Sidebar -->
-            <div class="bg-light border-right" id="sidebar-wrapper">
-                <div class="sidebar-heading">Chats</div>
+            <!-- Sidebars -->
+            <div class="bg-light border-right sidebar-wrapper" id="sidebar-wrapper">
+                <div class="sidebar-heading"><b>Conversations</b></div>
                 <div class="list-group list-group-flush" id="sidebar-chats">
                     <!-- Sidebar chats go here -->
                 </div>

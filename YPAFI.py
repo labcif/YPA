@@ -7,6 +7,7 @@ import time
 import json
 import sys
 import csv
+import mdgMod
 
 from javax.swing import JCheckBox
 from javax.swing import JList
@@ -153,7 +154,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App SMS",skCase)
         self.art_mms = self.create_artifact_type("YPA_MMS","Your Phone App MMS",skCase)
         self.art_pictures = self.create_artifact_type("YPA_PICTURES","Your Phone Recent Pictures",skCase)
-        self.art_freespace = self.create_artifact_type("YPA_FREESPACE","Your Phone Rows Recovered",skCase)
+        self.art_freespace = self.create_artifact_type("YPA_FREESPACE","Your Phone Rows Recovered(undark)",skCase)
+        self.art_dp = self.create_artifact_type("YPA_DP","Your Phone Rows Recovered(Delete parser)",skCase)
+
+        self.att_dp_type = self.create_attribute_type('YPA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", skCase)
+        self.att_dp_offset = self.create_attribute_type('YPA_DP_OFFSET', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Offset", skCase)
+        self.att_dp_lenght = self.create_attribute_type('YPA_DP_LENGHT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Lenght", skCase)
+        self.att_dp_data = self.create_attribute_type('YPA_DP_DATA', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data", skCase)
+        
 
         self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
         self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
@@ -247,6 +255,22 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     except Exception as e:
                         self.log(Level.SEVERE, str(e))
                         pass
+                try:
+
+                    mdg = mdgMod.mdg_modified.sqlite_rec(dbPath)
+                    res = mdg.extract_deleted()
+                    for line in res:
+                        art = file.newArtifact(self.art_dp.getTypeID())
+                        art.addAttribute(BlackboardAttribute(self.att_dp_type, YourPhoneIngestModuleFactory.moduleName, str(line[0])))
+                        art.addAttribute(BlackboardAttribute(self.att_dp_offset, YourPhoneIngestModuleFactory.moduleName, str(line[1])))
+                        art.addAttribute(BlackboardAttribute(self.att_dp_lenght, YourPhoneIngestModuleFactory.moduleName, str(line[2])))
+                        art.addAttribute(BlackboardAttribute(self.att_dp_data, YourPhoneIngestModuleFactory.moduleName, str(line[3])))
+                        self.index_artifact(blackboard, art,self.art_dp)                 
+                except Exception as e:
+                        self.log(Level.SEVERE, str(e))
+                        pass
+
+
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
                 continue

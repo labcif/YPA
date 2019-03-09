@@ -148,12 +148,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.path_to_undark = os.path.join(os.path.dirname(os.path.abspath(__file__)), "undark.exe")
             if not os.path.exists(self.path_to_undark):
                 raise IngestModuleException("EXE was not found in module folder")                   
-        self.art_contacts = self.create_artifact_type("YPA_CONTACTS","Your Phone App Contacts",skCase)
-        self.art_messages = self.create_artifact_type("YPA_MESSAGE","Your Phone App SMS",skCase)
-        self.art_mms = self.create_artifact_type("YPA_MMS","Your Phone App MMS",skCase)
-        self.art_pictures = self.create_artifact_type("YPA_PICTURES","Your Phone Recent Pictures",skCase)
-        self.art_freespace = self.create_artifact_type("YPA_FREESPACE","Your Phone Rows Recovered(undark)",skCase)
-        self.art_dp = self.create_artifact_type("YPA_DP","Your Phone Rows Recovered(Delete parser)",skCase)
+        
 
         self.att_dp_type = self.create_attribute_type('YPA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", skCase)
         self.att_dp_offset = self.create_attribute_type('YPA_DP_OFFSET', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Offset", skCase)
@@ -214,8 +209,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             ContentUtils.writeToFile(file, File(dbPath))
             try:
                 Class.forName("org.sqlite.JDBC").newInstance()
-                config = SQLiteConfig();
-                config.setEncoding(SQLiteConfig.Encoding.UTF8);
+                config = SQLiteConfig()
+                config.setEncoding(SQLiteConfig.Encoding.UTF8)
                 dbConn = DriverManager.getConnection(
                     "jdbc:sqlite:%s" % dbPath, config.toProperties())
             except Exception as e:
@@ -223,7 +218,20 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                          file.getName() + " (" + str(e) + ")")
                 continue
             try:
-                
+                full_path = (file.getParentPath() + file.getName()) 
+                split = full_path.split('/')                  
+                try:
+                    userName = split[-11]
+                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_"+ userName," " + userName+ " - Contacts",skCase)
+                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_"+ userName," " + userName+ " - SMS",skCase)
+                    self.art_mms = self.create_artifact_type("YPA_MMS_"+ userName," " + userName+ " - MMS",skCase)
+                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_"+ userName," " + userName+  " - Recent Pictures",skCase)
+                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_"+ userName," " + userName+  " - Rows Recovered(undark)",skCase)
+                    self.art_dp = self.create_artifact_type("YPA_DP_"+ userName," " + userName+ " - Rows Recovered(Delete parser)",skCase)
+                except Exception as e:
+                    self.log(Level.INFO, str(e))
+                    continue
+
                 stmt =dbConn.createStatement()
                 contacts = stmt.executeQuery(self.contact_query)
                 self.processContacts(contacts,file,blackboard,skCase)
@@ -254,7 +262,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         self.log(Level.SEVERE, str(e))
                         pass
                 try:
-
                     mdg = mdgMod.mdg_modified.sqlite_rec(dbPath)
                     res = mdg.extract_deleted()
                     for line in res:

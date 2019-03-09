@@ -48,6 +48,7 @@ from org.sleuthkit.autopsy.casemodule import Case
 from org.sleuthkit.autopsy.casemodule.services import Services
 from org.sleuthkit.autopsy.casemodule.services import FileManager
 from org.sleuthkit.autopsy.datamodel import ContentUtils
+from org.sleuthkit.autopsy.coreutils.MessageNotifyUtil import Message
 
 # Factory that defines the name and details of the module and allows Autopsy
 # to create instances of the modules that will do the analysis.
@@ -203,7 +204,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         files = fileManager.findFiles(dataSource, "phone.db") 
         numFiles = len(files)
         self.log(Level.INFO, "found " + str(numFiles) + " files")
-        fileCount = 0
+        self.anyValidFileFound = False
         for file in files:
             dbPath = os.path.join(self.temp_dir , str(file.getName()))
             ContentUtils.writeToFile(file, File(dbPath))
@@ -244,6 +245,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 mms = stmt.executeQuery(self.mms_query)
                 self.processMms(mms,file,blackboard,skCase)
                 
+                self.anyValidFileFound = True
+
                 if PlatformUtil.isWindowsOS():                
                     try:
                         with open(self.temp_dir+'\\freespace.txt','w') as f:
@@ -274,8 +277,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 except Exception as e:
                         self.log(Level.SEVERE, str(e))
                         pass
-
-
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
                 continue
@@ -304,8 +305,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         art.addAttribute(BlackboardAttribute(self.att_pic_size, YourPhoneIngestModuleFactory.moduleName, pic.getSize()))
                         self.index_artifact(blackboard, art, self.art_pictures)
             except Exception as e:
-                self.log(Level.INFO, "failed to open of the the csv files generated, starting next one")
+                self.log(Level.INFO, "failed to obtain photos")
                 continue
+        if not  self.anyValidFileFound:
+            Message.info("YPA: No valid database file found")
             
         return IngestModule.ProcessResult.OK   
 

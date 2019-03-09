@@ -30,14 +30,19 @@
                         <th scope="col">Address</th>
                         <th scope="col">Display name</th>
                         <th scope="col">Address type</th>
-                        <th scope="col"># contacted</th>
-                        <th scope="col">Last contacted</th>
-                        <th scope="col">Last updated</th>
+                        <th scope="col"># contacted <b>(*)</b></th>
+                        <th scope="col">Last contacted <b>(**)</b></th>
+                        <th scope="col">Last updated <b>(***)</b></th>
                     </tr>
                 </thead>
                 <tbody id="address-book-table">
                 </tbody>
             </table>
+            <div>
+                <p><b>(*)</b> Might not be accurate (progresses by blocks of 10 for values larger than 10) and includes contact done via WhatsApp and other instant messaging apps.</p>
+                <p><b>(**)</b> Affected by WhatsApp and other instant messaging apps.</p>
+                <p><b>(***)</b> Affected by updates of the smartphone SMS application.</p>
+            </div>
         </div>            
 
         <!-- Bootstrap core JavaScript -->

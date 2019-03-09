@@ -1,4 +1,3 @@
-
 import jarray
 import inspect
 import os
@@ -9,7 +8,6 @@ import sys
 import csv
 import mdgMod
 
-from javax.swing import JCheckBox
 from javax.swing import JList
 from javax.swing import JTextArea
 from javax.swing import BoxLayout
@@ -115,7 +113,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         try:
             # Index the artifact for keyword search
             blackboard.indexArtifact(artifact)
-        except Blackboard.BlackboardException as e:
+        except Blackboard.BlackboardException:
             self.log(Level.SEVERE, "Error indexing artifact " +
                      artifact.getDisplayName())
         # Fire an event to notify the UI and others that there is a new log artifact
@@ -364,7 +362,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, messages.getString('from_address')))
                 art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, messages.getString('display_name')))
                 art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, messages.getString('body')))
-                art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, messages.getString('status')))
+                art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, "Read" if messages.getString('status') == '2' else 'Unread' ))
                 art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, messages.getString('timestamp')))
                 self.index_artifact(blackboard, art,self.art_messages)
         except Exception as e:
@@ -398,25 +396,6 @@ class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just i
     def getVersionNumber(self):
         return serialVersionUID
 
-    # TODO: Define getters and settings for data you want to store from UI
-    def getRawFlag(self):
-        return self.flag
-
-    def setFlag(self, flag):
-        self.flag = flag
-
-    def getRegistryFlag(self):
-        return self.flag1
-
-    def setFlag1(self, flag1):
-        self.flag1 = flag1
-
-    def getAnomaliesFlag(self):
-        return self.flag2
-
-    def setFlag2(self, flag2):
-        self.flag2 = flag2
-
 # UI that is shown to user for each ingest job so they can configure the job.
 
 
@@ -432,28 +411,9 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel): # These 
 
     # We get passed in a previous version of the settings so that we can
     # prepopulate the UI
-    # TODO: Update this for your UI
     def __init__(self, settings):
         self.local_settings = settings
         self.initComponents()
-        self.customizeComponents()
-
-    # TODO: Update this for your UI
-    def checkBoxEvent(self, event):
-        if self.checkbox.isSelected():
-            self.local_settings.setFlag(True)
-        else:
-            self.local_settings.setFlag(False)
-        if self.checkbox1.isSelected():
-            self.local_settings.setFlag1(True)
-        else:
-            self.local_settings.setFlag1(False)
-        if self.checkbox2.isSelected():
-            self.local_settings.setFlag2(True)
-        else:
-            self.local_settings.setFlag2(False)
-
-    # TODO: Update this for your UI
 
     def initComponents(self):
         self.setLayout(BoxLayout(self, BoxLayout.Y_AXIS))
@@ -462,23 +422,7 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel): # These 
         self.panel1 = JPanel()
         self.panel1.setLayout(BoxLayout(self.panel1, BoxLayout.Y_AXIS))
         self.panel1.setAlignmentY(JComponent.LEFT_ALIGNMENT)
-        self.checkbox = JCheckBox(
-            "Extract raw table", actionPerformed=self.checkBoxEvent)
-        self.checkbox1 = JCheckBox(
-            "Search ntuser.dat for matches", actionPerformed=self.checkBoxEvent)
-        self.checkbox2 = JCheckBox(
-            "Search for date-time anomalies (this may take a few minutes more)", actionPerformed=self.checkBoxEvent)
-        self.panel1.add(self.checkbox)
-        self.panel1.add(self.checkbox1)
-        self.panel1.add(self.checkbox2)
         self.add(self.panel1)
-
-    # TODO: Update this for your UI
-
-    def customizeComponents(self):
-        self.checkbox.setSelected(self.local_settings.getRawFlag())
-        self.checkbox1.setSelected(self.local_settings.getRegistryFlag())
-        self.checkbox2.setSelected(self.local_settings.getAnomaliesFlag())
 
     # Return the settings used
     def getSettings(self):

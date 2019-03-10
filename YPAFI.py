@@ -222,18 +222,21 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 full_path = (file.getParentPath() + file.getName()) 
                 split = full_path.split('/')                  
                 try:
-                    userName = split[-11]
-                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_"+ userName," " + userName+ " - Contacts",skCase)
-                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_"+ userName," " + userName+ " - SMS",skCase)
-                    self.art_mms = self.create_artifact_type("YPA_MMS_"+ userName," " + userName+ " - MMS",skCase)
-                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_"+ userName," " + userName+  " - Recent Pictures",skCase)
-                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_"+ userName," " + userName+  " - Rows Recovered(undark)",skCase)
-                    self.art_dp = self.create_artifact_type("YPA_DP_"+ userName," " + userName+ " - Rows Recovered(Delete parser)",skCase)
+                    try:
+                        userName = split[-11]
+                    except IndexError:
+                        userName = "UNKNOWN"
+                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_"+ userName,"User " + userName+ " - Contacts",skCase)
+                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_"+ userName,"User " + userName+ " - SMS",skCase)
+                    self.art_mms = self.create_artifact_type("YPA_MMS_"+ userName,"User " + userName+ " - MMS",skCase)
+                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_"+ userName,"User " + userName+  " - Recent Pictures",skCase)
+                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_"+ userName,"User " + userName+  " - Rows Recovered(undark)",skCase)
+                    self.art_dp = self.create_artifact_type("YPA_DP_"+ userName,"User " + userName+ " - Rows Recovered(Delete parser)",skCase)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
 
-                stmt =dbConn.createStatement()
+                stmt = dbConn.createStatement()
                 contacts = stmt.executeQuery(self.contact_query)
                 self.processContacts(contacts,file,blackboard,skCase)
                 
@@ -245,6 +248,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 mms = stmt.executeQuery(self.mms_query)
                 self.processMms(mms,file,blackboard,skCase)
                 
+                self.log(Level.INFO, "loleca")
                 self.anyValidFileFound = True
 
                 if PlatformUtil.isWindowsOS():                
@@ -307,7 +311,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             except Exception as e:
                 self.log(Level.INFO, "failed to obtain photos")
                 continue
-        if not  self.anyValidFileFound:
+        if not self.anyValidFileFound:
             Message.info("YPA: No valid database file found")
             
         return IngestModule.ProcessResult.OK   

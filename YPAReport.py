@@ -79,7 +79,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def get_sanitized_address(self, address):
         return address.replace('+','plus')
 
-    def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user, address):
+    def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user, address, username):
         html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
         div_msg = html_file.new_tag("div")
         span_time = html_file.new_tag("span")
@@ -91,7 +91,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         else:
             div_msg['class'] = "container text-right"
             div_msg['data-toggle'] = "modal"
-            div_msg['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address)
+            div_msg['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address) + username
             span_time['class'] = "time-right"
 
 
@@ -107,10 +107,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         div_msg.append(p_msg_body)
         div_msg.append(span_time)
 
+        self.log(Level.INFO, "HTML CHAT ID: " + html_chat_id)
         chat = html_file.select(html_chat_id)[0]
         chat.append(div_msg)
 
-    def add_chat_to_html_report(self, html_file, chat_id, thread_id):
+    def add_chat_to_html_report(self, html_file, chat_id, thread_id, username):
         html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
         div_chat_id = COLLAPSE_PREFIX + thread_id
 
@@ -134,10 +135,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         collapseable_chats = html_file.select("#page-content-wrapper")[0]
         collapseable_chats.append(div_chat)
 
-    def add_contact_modal(self, html_file, artifact, id):
+    def add_contact_modal(self, html_file, artifact, id, username):
         div_modal = html_file.new_tag("div")
         div_modal['class'] = "modal fade"
-        div_modal['id'] = MODAL_PREFIX + self.get_sanitized_address(id)
+        div_modal['id'] = MODAL_PREFIX + self.get_sanitized_address(id) + username
         div_modal['role'] = "dialog"
         div_modal['tabindex'] = "-1"
 
@@ -196,8 +197,13 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         conversation.append(i_total_messages)
         conversation.append(span_time)
 
-    def add_to_address_book(self, html_file, contact_id, list_attributes):
+    def add_to_address_book(self, html_file, contact_id, list_attributes, username):
         tr_address = html_file.new_tag("tr")
+
+        td_user = html_file.new_tag("td")
+        td_user.string = username
+
+        tr_address.append(td_user)
         th_contact_id = html_file.new_tag("th")
         th_contact_id['scope'] = "row"
         th_contact_id.string = contact_id
@@ -217,12 +223,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         address_book = html_file.select("#address-book-table")[0]
         address_book.append(tr_address)
 
-    def add_to_contact_book(self, html_file, display_name, address, timestamp):
+    def add_to_contact_book(self, html_file, display_name, address, timestamp, username):
         # Add chat to sidebar
         a_chat = html_file.new_tag("a")
         a_chat['class'] = "list-group-item list-group-item-action bg-light"
         a_chat['data-toggle'] = "modal"
-        a_chat['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address)
+        a_chat['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address) + username
         a_chat.string = display_name
 
         span_time = html_file.new_tag("span")
@@ -260,8 +266,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
 
         # Get artifact lists
-        art_list_messages = skCase.getBlackboardArtifacts("YPA_MESSAGE")
-        art_list_contacts = skCase.getBlackboardArtifacts("YPA_CONTACTS")
+        # art_list_custom_regex = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'TSK_LFA_CUSTOM_REGEX_%'")
+
+        art_list_messages = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_MESSAGE_%'")
+        art_list_contacts = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_CONTACTS_%'")
         total_artifact_count = len(art_list_messages) + len(art_list_contacts)
 
 
@@ -322,6 +330,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         art_count = 0
         attribute_type = self.configPanel.getAttTypeList()[self.configPanel.getSelectedAddressBookOrderIndex()]
         for artifact in sorted(art_list_contacts, key = lambda (a): a.getAttribute(attribute_type).getDisplayString()):
+            username = artifact.getArtifactTypeName().split('_')[-1]
             att_list = []
             contact_id = artifact.getAttribute(att_contact_id).getDisplayString()
             id_for_contact = artifact.getAttribute(att_address).getDisplayString()
@@ -331,17 +340,18 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             att_list.append(artifact.getAttribute(att_times_contacted).getDisplayString())
             att_list.append(artifact.getAttribute(att_last_contacted).getDisplayString())
             att_list.append(artifact.getAttribute(att_last_updated).getDisplayString())
-            self.add_contact_modal(html_ypa, artifact, id_for_contact)
+            self.add_contact_modal(html_ypa, artifact, id_for_contact, username)
             # self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
-            self.add_to_address_book(html_ypa_book, contact_id, att_list)
+            self.add_to_address_book(html_ypa_book, contact_id, att_list, username)
             art_count = self.increment_progress_bar(progressBar, art_count)
 
         dict_thread_ids = {}
         for artifact in art_list_messages:
+            username = artifact.getArtifactTypeName().split('_')[-1]
             # Overall chat details
-            thread_id = artifact.getAttribute(att_thread_id).getValueString()
+            thread_id = artifact.getAttribute(att_thread_id).getValueString() + username
             display_name = artifact.getAttribute(att_display_name).getValueString()
-            chat_name = artifact.getAttribute(att_recipient_list).getValueString()
+            chat_name = artifact.getAttribute(att_recipient_list).getValueString() + " (user: " + username + ")"
             address = artifact.getAttribute(att_from_address).getValueString()
             sender = display_name + " (" + address + ")"
 
@@ -351,12 +361,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             if not dict_thread_ids.get(thread_id):
                 # Create Chat
                 dict_thread_ids[thread_id] = [1, timestamp]
-                self.add_chat_to_html_report(html_ypa, chat_name, thread_id)
+                self.add_chat_to_html_report(html_ypa, chat_name, thread_id, username)
             else:
                 dict_thread_ids[thread_id][0] += 1
                 dict_thread_ids[thread_id][1] = timestamp
 
-            self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address)
+            self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address, username)
 
             art_count = self.increment_progress_bar(progressBar, art_count)
 

@@ -31,8 +31,8 @@ Luís Andrade - 2180234@my.ipleiria.pt
 João Silva - 2180073@my.ipleiria.pt  
 
 # Licenses
-This module is licenses under GPL 3.0
+This module is licensed under GPL 3.0
 
 This module uses a modified version of mdegrazia's SQLite-Deleted-Records-Parser (https://github.com/mdegrazia/SQLite-Deleted-Records-Parser) which is licensed under GPL 3.0
 
-This module uses the binary form of Undark (https://github.com/inflex/undark). Undarks license can be located at the file undark-LICENSE
+This module uses the binary form of Undark (https://github.com/inflex/undark). Undark's license can be located at the file undark-LICENSE

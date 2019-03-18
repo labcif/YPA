@@ -1,13 +1,15 @@
-#sqlparse.py
-#
-#This program parses an SQLite3 database for deleted entires and
+#mdg_modified.py
+#This module parses an SQLite3 database for deleted entires and
 #places the output into either and TSV file, or text file
 #
 #The SQLite file format, offsets etc is described at
 #sqlite.org/fileformat.html
 #
 #
-# Copyright (C) 2015 Mari DeGrazia (arizona4n6@gmail.com)
+#
+# This is a modified version of Mari DeGrazia's (arizona4n6@gmail.com) SQLite-Deleted-Records-Parser https://github.com/mdegrazia/SQLite-Deleted-Records-Parser
+# 
+# This version was made for the Your Phone Analyzer Autospy module found at https://github.com/JVictorRS/YourPhoneAnalyzer
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,19 +22,6 @@
 # GNU General Public License for more details.
 #
 # You can view the GNU General Public License at <http://www.gnu.org/licenses/>
-#
-# Version History:
-# v1.1 2013-11-05
-#
-# v1.2 2015-06-20
-#support added in to print out non b-tree pages
-#
-# v.1.3 2015-06-21
-#minor changes / comments etc.
-# 
-#		
-#Find a bug???? Please let me know and I'll try to fix it (if you ask nicely....)
-#
 
 import struct
 import sys

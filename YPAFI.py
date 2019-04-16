@@ -179,6 +179,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
      
         self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", skCase)
 
+        self.att_db_uv = self.create_attribute_type('YPA_DB_UV', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Sqlite User Version", skCase)
+
         self.att_rec_row = self.create_attribute_type('YPA_REC_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data recovered from unvacuumed row", skCase)
         self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, datetime(a.last_contacted_time / 10000000 - 11644473600,'unixepoch') as last_contacted_time,  datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
         self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, ifnull(m.from_address,'self') as from_address, datetime(m.timestamp/ 10000000 - 11644473600,'unixepoch') as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
@@ -232,6 +234,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.art_pictures = self.create_artifact_type("YPA_PICTURES_"+ userName,"User " + userName+  " - Recent Pictures",skCase)
                     self.art_freespace = self.create_artifact_type("YPA_FREESPACE_"+ userName,"User " + userName+  " - Rows Recovered(undark)",skCase)
                     self.art_dp = self.create_artifact_type("YPA_DP_"+ userName,"User " + userName+ " - Rows Recovered(Delete parser)",skCase)
+                    self.art_set = self.create_artifact_type("YPA_SETTINGS_"+ userName,"User " + userName+ " - Database Settings",skCase)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
@@ -248,8 +251,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 mms = stmt.executeQuery(self.mms_query)
                 self.processMms(mms,file,blackboard,skCase)
                 
-                self.log(Level.INFO, "loleca")
                 self.anyValidFileFound = True
+
+                stmt =dbConn.createStatement()
+                prag_uv = stmt.executeQuery("pragma user_version")
+                art = file.newArtifact(self.art_set.getTypeID())
+                prag_uv.next()
+                art.addAttribute(BlackboardAttribute(self.att_db_uv, YourPhoneIngestModuleFactory.moduleName, prag_uv.getString("user_version")))
+                self.index_artifact(blackboard, art,self.art_set)
 
                 if PlatformUtil.isWindowsOS():                
                     try:

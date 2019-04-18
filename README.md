@@ -28,7 +28,7 @@ If you have any suggestion or find any bug, please contact us or create an issue
 
 Luís Andrade - luis.andrade@ipleiria.pt
 
-João Silva - 2180073@my.ipleiria.pt  
+João Silva - jvictor.reiss@gmail.com  
 
 Patrício Domingues - patricio.domingues@ipleiria.pt
 

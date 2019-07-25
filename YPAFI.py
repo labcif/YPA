@@ -24,7 +24,8 @@ from org.python.core.util import StringUtil
 from java.lang import Class
 from java.lang import System
 from java.sql import DriverManager, SQLException
-from org.sqlite import SQLiteConfig
+from org.sqlite import SQLiteConfig, SQLiteOpenMode
+from org.sqlite.SQLiteConfig import JournalMode
 from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.datamodel import SleuthkitCase
@@ -221,6 +222,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 Class.forName("org.sqlite.JDBC").newInstance()
                 config = SQLiteConfig()
                 config.setEncoding(SQLiteConfig.Encoding.UTF8)
+                config.setJournalMode(JournalMode.WAL)
+                config.setReadOnly(True)
                 dbConn = DriverManager.getConnection(
                     "jdbc:sqlite:%s" % dbPath, config.toProperties())
             except Exception as e:

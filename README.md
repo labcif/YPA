@@ -2,7 +2,6 @@
 
 *   [Installation](#windows-installation)
 *   [Authors + Contacts](#authors)
-*   [Project Description](#project-description-pt)
 *   [Licenses](#licenses)
 
 Autopsy plugin made to extract information from the 'Your Phone' Windows 10 App
@@ -21,16 +20,22 @@ Autopsy plugin made to extract information from the 'Your Phone' Windows 10 App
 
 # Authors
 
-YPA was developed by Luís Andrade and João Silva, two Computer Engineering graduates.
-Mentored by Patrício Domingues and Miguel Frade and proposed by Patrício Domingues.
+YPA was developed by Luís Miguel Andrade, João Victor Silva, Patrício Domingues, and Miguel Frade.
 
 If you have any suggestion or find any bug, please contact us or create an issue in this repository.
 
 **Contacts:**  
-Luís Andrade - 2180234@my.ipleiria.pt
-João Silva - 2180073@my.ipleiria.pt  
+
+Luís Andrade - luis.andrade@ipleiria.pt
+
+João Silva - jvictor.reiss@gmail.com  
+
+Patrício Domingues - patricio.domingues@ipleiria.pt
+
+Miguel Frade - miguel.frade@ipleiria.pt
 
 # Licenses
+
 This module is licensed under GPL 3.0
 
 This module uses a modified version of mdegrazia's SQLite-Deleted-Records-Parser (https://github.com/mdegrazia/SQLite-Deleted-Records-Parser) which is licensed under GPL 3.0

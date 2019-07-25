@@ -115,7 +115,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             # Index the artifact for keyword search
             blackboard.indexArtifact(artifact)
         except Blackboard.BlackboardException:
-            self.log(Level.SEVERE, "Error indexing artifact " +
+            self.log(Level.INFO, "Error indexing artifact " +
                      artifact.getDisplayName())
         # Fire an event to notify the UI and others that there is a new log artifact
         IngestServices.getInstance().fireModuleDataEvent(
@@ -126,7 +126,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         try:
             skCase.addBlackboardArtifactType(art_name, "YPA: " + art_desc)
         except:
-            self.log(Level.INFO, "ERROR creating artifact type: " + art_desc)
+            self.log(Level.INFO, "Error creating artifact type: " + art_desc)
         art = skCase.getArtifactType(art_name)
         self.art_list.append(art)
         return art
@@ -135,8 +135,15 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         try:
             skCase.addArtifactAttributeType(att_name, type, att_desc)
         except:
-            self.log(Level.INFO, "ERROR creating attribute type: " + att_desc)
+            self.log(Level.INFO, "Error creating attribute type: " + att_desc)
         return skCase.getAttributeType(att_name)
+
+    def execute_query(self, query, db):
+        try:
+            return db.createStatement().executeQuery(query)
+        except SQLException as e:
+            self.log(Level.SEVERE, "Failed to execute query: " + query + ", due to " + str(e))
+        return
 
     # Where any setup and configuration is done
     # 'context' is an instance of org.sleuthkit.autopsy.ingest.IngestJobContext.
@@ -239,22 +246,16 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, str(e))
                     continue
 
-                stmt = dbConn.createStatement()
-                contacts = stmt.executeQuery(self.contact_query)
-                self.processContacts(contacts,file,blackboard,skCase)
+                self.processContacts(self.execute_query(self.contact_query, dbConn),file,blackboard,skCase)
+
+                self.processMessages(self.execute_query(self.messages_query, dbConn),file,blackboard,skCase)
                 
-                stmt =dbConn.createStatement()
-                messages = stmt.executeQuery(self.messages_query)
-                self.processMessages(messages,file,blackboard,skCase)
-                
-                stmt =dbConn.createStatement()
-                mms = stmt.executeQuery(self.mms_query)
-                self.processMms(mms,file,blackboard,skCase)
+                self.processMms(self.execute_query(self.mms_query, dbConn),file,blackboard,skCase)
                 
                 self.anyValidFileFound = True
 
-                stmt =dbConn.createStatement()
-                prag_uv = stmt.executeQuery("pragma user_version")
+                prag_uv = self.execute_query("pragma user_version", dbConn)
+
                 art = file.newArtifact(self.art_set.getTypeID())
                 prag_uv.next()
                 art.addAttribute(BlackboardAttribute(self.att_db_uv, YourPhoneIngestModuleFactory.moduleName, prag_uv.getString("user_version")))
@@ -265,11 +266,11 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         with open(self.temp_dir+'\\freespace.txt','w') as f:
                             subprocess.Popen([self.path_to_undark,'-i', dbPath, '--freespace'],stdout=f).communicate()
                         with open(self.temp_dir+'\\freespace.txt','r') as f:
-                            self.log(Level.INFO, ' '.join([self.path_to_undark,'-i', dbPath, '--freespace >']))
-                            self.log(Level.INFO, "called undark")
+                            # self.log(Level.INFO, ' '.join([self.path_to_undark,'-i', dbPath, '--freespace >']))
+                            # self.log(Level.INFO, "Called undark")
                             line = f.readline()
                             while line:
-                                self.log(Level.INFO, "opened result")
+                                # self.log(Level.INFO, "opened result")
                                 art = file.newArtifact(self.art_freespace.getTypeID())
                                 art.addAttribute(BlackboardAttribute(self.att_rec_row, YourPhoneIngestModuleFactory.moduleName, str(line)))
                                 self.index_artifact(blackboard, art,self.art_freespace)
@@ -318,14 +319,16 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         art.addAttribute(BlackboardAttribute(self.att_pic_size, YourPhoneIngestModuleFactory.moduleName, pic.getSize()))
                         self.index_artifact(blackboard, art, self.art_pictures)
             except Exception as e:
-                self.log(Level.INFO, "failed to obtain photos")
+                self.log(Level.SEVERE, "Failed to obtain photos")
                 continue
         if not self.anyValidFileFound:
             Message.info("YPA: No valid database file found")
             
         return IngestModule.ProcessResult.OK   
 
-    def processMms(self, mms,file,blackboard,skCase):
+    def processMms(self, mms, file, blackboard, skCase):
+        if not mms:
+            return None
         try:
             mms_obj = {}
             while mms.next():
@@ -375,7 +378,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.log(Level.SEVERE, str(e))
             return None
 
-    def processMessages(self, messages,file,blackboard,skCase):
+    def processMessages(self, messages, file, blackboard, skCase):
+        if not messages:
+            return None
         try:
             while messages.next():
                 art = file.newArtifact(self.art_messages.getTypeID())
@@ -392,7 +397,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.log(Level.SEVERE, str(e))
             return None
                 
-    def processContacts(self, contacts,file,blackboard,skCase):
+    def processContacts(self, contacts, file, blackboard, skCase):
+        if not contacts:
+            return None
         try:
             while contacts.next():
                 art = file.newArtifact(self.art_contacts.getTypeID())

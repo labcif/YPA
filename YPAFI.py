@@ -146,6 +146,23 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.log(Level.SEVERE, "Failed to execute query: " + query + ", due to " + str(e))
         return
 
+    def create_db_conn(self, file):
+        dbPath = os.path.join(self.temp_dir , str(file.getName()))
+        ContentUtils.writeToFile(file, File(dbPath))
+        try:
+            Class.forName("org.sqlite.JDBC").newInstance()
+            config = SQLiteConfig()
+            config.setEncoding(SQLiteConfig.Encoding.UTF8)
+            config.setJournalMode(JournalMode.WAL)
+            config.setReadOnly(True)
+            return DriverManager.getConnection(
+                "jdbc:sqlite:%s" % dbPath, config.toProperties()), dbPath
+        except Exception as e:
+            self.log(Level.SEVERE, "Could not create database connection for " +
+                        dbPath + " (" + str(e) + ")")
+        return None, dbPath
+    
+
     # Where any setup and configuration is done
     # 'context' is an instance of org.sleuthkit.autopsy.ingest.IngestJobContext.
     # See: http://sleuthkit.org/autopsy/docs/api-docs/3.1/classorg_1_1sleuthkit_1_1autopsy_1_1ingest_1_1_ingest_job_context.html
@@ -159,20 +176,24 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 raise IngestModuleException("EXE was not found in module folder")                   
         
 
+        # Settings attributes
         self.att_dp_type = self.create_attribute_type('YPA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", skCase)
         self.att_dp_offset = self.create_attribute_type('YPA_DP_OFFSET', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Offset", skCase)
         self.att_dp_lenght = self.create_attribute_type('YPA_DP_LENGHT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Lenght", skCase)
         self.att_dp_data = self.create_attribute_type('YPA_DP_DATA', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data", skCase)
         
-
+        # Address attributes
         self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact id", skCase)
         self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
         self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase)
         self.att_address_type = self.create_attribute_type('YPA_ADDRESS_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address type", skCase)
         self.att_times_contacted = self.create_attribute_type('YPA_TIMES_CONTACTED', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Times contacted", skCase)
         self.att_last_contacted_time = self.create_attribute_type('YPA_LAST_CONTACT_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last contacted time", skCase) 
+        
+        # Last updated time
         self.att_last_updated_time = self.create_attribute_type('YPA_LAST_UPDATE_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Last updated time", skCase) 
 
+        # Conversations attributes
         self.att_thread_id = self.create_attribute_type('YPA_THREAD_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Thread id", skCase) 
         self.att_message_id = self.create_attribute_type('YPA_MESSAGE_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message id", skCase) 
         self.att_recipient_list = self.create_attribute_type('YPA_RECIPIENT_LIST', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Recipients", skCase) 
@@ -181,31 +202,38 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_status = self.create_attribute_type('YPA_STATUS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase)         
         self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase)      
 
+        # MMS-related attributes
         self.att_mms_text = self.create_attribute_type('YPA_MMS_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", skCase)
         self.att_num_of_files = self.create_attribute_type('YPA_NUM_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Number of files", skCase)
         self.att_name_of_files = self.create_attribute_type('YPA_NAME_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Name of files", skCase)
      
+        # Picture size (B)
         self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", skCase)
 
+        # DB User Version
         self.att_db_uv = self.create_attribute_type('YPA_DB_UV', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Sqlite User Version", skCase)
 
+        # Recovered rows
         self.att_rec_row = self.create_attribute_type('YPA_REC_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data recovered from unvacuumed row", skCase)
+        
+        # photo.db photo attributes
+        self.att_photo_id = self.create_attribute_type('YPA_PHOTO_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Photo id", skCase)
+        self.att_uri = self.create_attribute_type('YPA_URI', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "URI", skCase)
+        self.att_photo_thumbnail = self.create_attribute_type('YPA_PHOTO_THUMBNAIL', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.BYTE, "Thumbnail", skCase)
+        self.att_photo = self.create_attribute_type('YPA_PHOTO_FULL', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.BYTE, "Blob", skCase)
+
+        # DB queries
         self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, datetime(a.last_contacted_time / 10000000 - 11644473600,'unixepoch') as last_contacted_time,  datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
         self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, ifnull(m.from_address,'self') as from_address, datetime(m.timestamp/ 10000000 - 11644473600,'unixepoch') as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
         self.mms_query = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address from mms_part mp left join mms mm on mp.message_id = mm.message_id left join mms_address ma on mp.message_id = ma.message_id left join address a on ma.address = a.address left join contact c on a.contact_id = c.contact_id where ma.address not like 'insert-address-token' "
-        self.address_types = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}  
-
-
-        
-        
-
+        self.address_types = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}
+        self.photos_query = "select photo_id, name, datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time, size, uri, thumbnail, blob from photo" 
         
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
     # See: http://www.sleuthkit.org/sleuthkit/docs/jni-docs/interfaceorg_1_1sleuthkit_1_1datamodel_1_1_content.html
     # 'progressBar' is of type org.sleuthkit.autopsy.ingest.DataSourceIngestModuleProgress
     # See: http://sleuthkit.org/autopsy/docs/api-docs/3.1/classorg_1_1sleuthkit_1_1autopsy_1_1ingest_1_1_data_source_ingest_module_progress.html
-
     def process(self, dataSource, progressBar):
         blackboard = Case.getCurrentCase().getServices().getBlackboard()
         skCase = Case.getCurrentCase().getSleuthkitCase()
@@ -216,20 +244,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.log(Level.INFO, "found " + str(numFiles) + " files")
         self.anyValidFileFound = False
         for file in files:
-            dbPath = os.path.join(self.temp_dir , str(file.getName()))
-            ContentUtils.writeToFile(file, File(dbPath))
-            try:
-                Class.forName("org.sqlite.JDBC").newInstance()
-                config = SQLiteConfig()
-                config.setEncoding(SQLiteConfig.Encoding.UTF8)
-                config.setJournalMode(JournalMode.WAL)
-                config.setReadOnly(True)
-                dbConn = DriverManager.getConnection(
-                    "jdbc:sqlite:%s" % dbPath, config.toProperties())
-            except Exception as e:
-                self.log(Level.INFO, "Could not open database file (not SQLite) " +
-                         file.getName() + " (" + str(e) + ")")
-                continue
+            dbConn, dbPath = self.create_db_conn(file)
             try:
                 full_path = (file.getParentPath() + file.getName()) 
                 split = full_path.split('/')                  
@@ -238,13 +253,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         userName = split[-11]
                     except IndexError:
                         userName = "UNKNOWN"
-                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_"+ userName,"User " + userName+ " - Contacts",skCase)
-                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_"+ userName,"User " + userName+ " - SMS",skCase)
-                    self.art_mms = self.create_artifact_type("YPA_MMS_"+ userName,"User " + userName+ " - MMS",skCase)
-                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_"+ userName,"User " + userName+  " - Recent Pictures",skCase)
-                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_"+ userName,"User " + userName+  " - Rows Recovered(undark)",skCase)
-                    self.art_dp = self.create_artifact_type("YPA_DP_"+ userName,"User " + userName+ " - Rows Recovered(Delete parser)",skCase)
-                    self.art_set = self.create_artifact_type("YPA_SETTINGS_"+ userName,"User " + userName+ " - Database Settings",skCase)
+                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_"+ userName,"User " + userName+ " - Contacts", skCase)
+                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_"+ userName,"User " + userName+ " - SMS", skCase)
+                    self.art_mms = self.create_artifact_type("YPA_MMS_"+ userName,"User " + userName+ " - MMS", skCase)
+                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_"+ userName,"User " + userName+  " - Recent Pictures", skCase)
+                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_"+ userName,"User " + userName+  " - Rows Recovered(undark)", skCase)
+                    self.art_dp = self.create_artifact_type("YPA_DP_"+ userName,"User " + userName+ " - Rows Recovered(Delete parser)", skCase)
+                    self.art_settings = self.create_artifact_type("YPA_SETTINGS_"+ userName,"User " + userName+ " - Database Settings", skCase)
+                    self.art_photo = self.create_artifact_type("YPA_PHOTO_"+ userName, "User " + userName+ " - Photos", skCase)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
@@ -259,11 +275,16 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
                 prag_uv = self.execute_query("pragma user_version", dbConn)
 
-                art = file.newArtifact(self.art_set.getTypeID())
+                art = file.newArtifact(self.art_settings.getTypeID())
                 prag_uv.next()
                 art.addAttribute(BlackboardAttribute(self.att_db_uv, YourPhoneIngestModuleFactory.moduleName, prag_uv.getString("user_version")))
-                self.index_artifact(blackboard, art,self.art_set)
+                self.index_artifact(blackboard, art,self.art_settings)
 
+                # Other YP databases (photos.db, notifications.db, settings.db)
+                dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
+                dbs = [item for item in dbs if "phone.db" not in item.getName()]
+                self.log(Level.INFO, "Number of dbs: " + str(len(dbs)))
+                # Undark and mdg
                 if PlatformUtil.isWindowsOS():                
                     try:
                         with open(self.temp_dir+'\\freespace.txt','w') as f:
@@ -298,11 +319,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 self.log(Level.SEVERE, str(e))
                 continue
             finally:
+                # Close existing DB connections and remove temp DBs
                 dbConn.close()
                 try:
                     os.remove(dbPath)
                 except (Exception, OSError) as e:
                     self.log(Level.SEVERE, str(e))
+            
+            # Recent photos (Not the photos in photos.db)
             try:
                 full_path = (file.getParentPath() + file.getName()) 
                 split = full_path.split('/')
@@ -318,11 +342,11 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         self.log(Level.INFO, pic.getName())
                         # Make an artifact
                         art = pic.newArtifact(self.art_pictures.getTypeID())
-                                    # Register file size
+                        # Register file size
                         art.addAttribute(BlackboardAttribute(self.att_pic_size, YourPhoneIngestModuleFactory.moduleName, pic.getSize()))
                         self.index_artifact(blackboard, art, self.art_pictures)
             except Exception as e:
-                self.log(Level.SEVERE, "Failed to obtain photos")
+                self.log(Level.SEVERE, "Failed to obtain Recent photos")
                 continue
         if not self.anyValidFileFound:
             Message.info("YPA: No valid database file found")

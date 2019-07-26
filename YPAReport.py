@@ -193,6 +193,52 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         html_body = html_file.select("#page-content-wrapper")[0]
         html_body.append(div_modal)
+    
+    def add_photo_modal(self, html_file, path, id, username):
+        div_modal = html_file.new_tag("div")
+        div_modal['class'] = "modal fade"
+        div_modal['id'] = MODAL_PREFIX + id + username
+        div_modal['role'] = "dialog"
+        div_modal['tabindex'] = "-1"
+
+        div_dialog = html_file.new_tag("div")
+        div_dialog['class'] = "modal-dialog modal-xl"
+        div_dialog['role'] = "document"
+        div_modal.append(div_dialog)
+
+        div_content = html_file.new_tag("div")
+        div_content['class'] = "modal-content"
+        div_dialog.append(div_content)
+
+        div_header = html_file.new_tag("div")
+        div_header['class'] = "modal-header"
+        div_content.append(div_header)
+
+        h_title = html_file.new_tag("h5")
+        h_title['class'] = "modal-title"
+        h_title.string = "Zoomed photo"
+        div_header.append(h_title)
+
+        button_close = html_file.new_tag("button")
+        button_close['class'] = "close"
+        button_close['data-dismiss'] = "modal"
+        div_header.append(button_close)
+
+        span_close = html_file.new_tag("span")
+        span_close.string = "x"
+        button_close.append(span_close)
+
+        div_body = html_file.new_tag("div")
+        div_body['class'] = "modal-body"
+
+        img = html_file.new_tag("img")
+        img['src'] = path
+        div_body.append(img)
+
+        div_content.append(div_body)
+
+        html_body = html_file.select("#page-content-wrapper")[0]
+        html_body.append(div_modal)
 
     def add_total_msgs_to_chat(self, html_file, thread_id, num_msgs, timestamp):
         conversation = html_file.select("#" + CONVERSATION_PREFIX + thread_id)[0]
@@ -206,20 +252,20 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         conversation.append(i_total_messages)
         conversation.append(span_time)
 
-    def add_to_address_book(self, html_file, contact_id, list_attributes, username):
-        tr_address = html_file.new_tag("tr")
+    def create_tr_for_table(self, html_file, username, id, list_att):
+        tr = html_file.new_tag("tr")
 
         td_user = html_file.new_tag("td")
         td_user.string = username
 
-        tr_address.append(td_user)
-        th_contact_id = html_file.new_tag("th")
-        th_contact_id['scope'] = "row"
-        th_contact_id.string = contact_id
+        tr.append(td_user)
+        th_id = html_file.new_tag("th")
+        th_id['scope'] = "row"
+        th_id.string = id
 
-        tr_address.append(th_contact_id)
+        tr.append(th_id)
 
-        for attribute in list_attributes:
+        for attribute in list_att:
             td = html_file.new_tag("td")
 
             if attribute == "1970-01-01 00:00:00":
@@ -227,33 +273,17 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             else:
                 td.string = attribute
 
-            tr_address.append(td)
+            tr.append(td)
+        return tr
+
+    def add_to_address_book(self, html_file, contact_id, list_att, username):
+        tr_address = self.create_tr_for_table(html_file, username, contact_id, list_att)
 
         address_book = html_file.select("#address-book-table")[0]
         address_book.append(tr_address)
     
-    def add_to_photos(self, html_file, username, photo_id, path, list_attributes):
-        tr_photo = html_file.new_tag("tr")
-
-        td_user = html_file.new_tag("td")
-        td_user.string = username
-
-        tr_photo.append(td_user)
-        th_photo_id = html_file.new_tag("th")
-        th_photo_id['scope'] = "row"
-        th_photo_id.string = photo_id
-
-        tr_photo.append(th_photo_id)
-
-        for attribute in list_attributes:
-            td = html_file.new_tag("td")
-
-            if attribute == "1970-01-01 00:00:00":
-                td.string = "---"
-            else:
-                td.string = attribute
-
-            tr_photo.append(td)
+    def add_to_photos(self, html_file, username, photo_id, path, list_att):
+        tr_photo = self.create_tr_for_table(html_file, username, photo_id, list_att)
 
         td = html_file.new_tag("td")
         img = html_file.new_tag("img")
@@ -263,6 +293,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         img['alt'] = "Image error"
         td.append(img)
         tr_photo.append(td)
+
+
+        img['data-toggle'] = "modal"
+        img['data-target'] = HTML_MODAL_PREFIX + photo_id + username
 
         photos = html_file.select("#photo-table")[0]
         photos.append(tr_photo)
@@ -296,11 +330,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         path = os.path.join(base_dir, name)
         try:
             bis = ByteArrayInputStream(photo_bytes)
-            b_image2 = ImageIO.read(bis)
-            ImageIO.write(b_image2, "jpg", File(path) )
+            b_image = ImageIO.read(bis)
+            ImageIO.write(b_image, "jpg", File(path))
         except Exception as e:
             self.log(Level.SEVERE, "Error saving photo: " + str(e))
         return path
+    
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
     # The 'progressBar' object is of type ReportProgressPanel.
     #   See: http://sleuthkit.org/autopsy/docs/api-docs/4.4/classorg_1_1sleuthkit_1_1autopsy_1_1report_1_1_report_progress_panel.html
@@ -374,7 +409,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             html_ypa_photos = bs4.BeautifulSoup(txt)
 
         self.add_link_to_html_report(html_ypa, "#address-book", self.getRelativeFilePathAddressBook())
+        self.add_link_to_html_report(html_ypa, "#photos", self.getRelativeFilePathPhotos())
         self.add_link_to_html_report(html_ypa_book, "#conversations", self.getRelativeFilePath())
+        self.add_link_to_html_report(html_ypa_book, "#photos", self.getRelativeFilePathPhotos())
+        self.add_link_to_html_report(html_ypa_photos, "#conversations", self.getRelativeFilePath())
+        self.add_link_to_html_report(html_ypa_photos, "#address-book", self.getRelativeFilePathAddressBook())
         
         # Get Attribute types
         att_thread_id = skCase.getAttributeType("YPA_THREAD_ID")
@@ -458,7 +497,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             rs.next()
             
             path = self.save_photo(rs.getBytes('blob'), baseReportDir, name)
-            
+            self.add_photo_modal(html_ypa_photos, path, photo_id, username)
             self.add_to_photos(html_ypa_photos, username, photo_id, path, [name, last_updated, size, uri])
 
             db_functions.close_db_conn(self, db_conn, db_path)

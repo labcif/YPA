@@ -23,6 +23,12 @@ from java.awt import FlowLayout
 from java.awt import BorderLayout
 from javax.swing import JFrame
 from java.awt import Color
+from db import db_functions
+
+from java.awt.image import BufferedImage
+from java.io import File, ByteArrayOutputStream, ByteArrayInputStream, File
+from javax.imageio import ImageIO
+from java.lang import NullPointerException
 
 COLLAPSE_PREFIX = "collapsechat"
 HTML_COLLAPSE_PREFIX = "#" + COLLAPSE_PREFIX
@@ -55,6 +61,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
     def getRelativeFilePathAddressBook(self):
         return "YPA_AddressBook_" + Case.getCurrentCase().getName() + ".html"
+    
+    def getRelativeFilePathPhotos(self):
+        return "YPA_Photos_" + Case.getCurrentCase().getName() + ".html"
 
     def write_conversation_to_html(self, progressBar, art_count, artifact, html_file):
         row = html_file.new_tag("tr")
@@ -107,7 +116,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         div_msg.append(p_msg_body)
         div_msg.append(span_time)
 
-        self.log(Level.INFO, "HTML CHAT ID: " + html_chat_id)
+        # self.log(Level.INFO, "HTML CHAT ID: " + html_chat_id)
         chat = html_file.select(html_chat_id)[0]
         chat.append(div_msg)
 
@@ -222,6 +231,41 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         address_book = html_file.select("#address-book-table")[0]
         address_book.append(tr_address)
+    
+    def add_to_photos(self, html_file, username, photo_id, path, list_attributes):
+        tr_photo = html_file.new_tag("tr")
+
+        td_user = html_file.new_tag("td")
+        td_user.string = username
+
+        tr_photo.append(td_user)
+        th_photo_id = html_file.new_tag("th")
+        th_photo_id['scope'] = "row"
+        th_photo_id.string = photo_id
+
+        tr_photo.append(th_photo_id)
+
+        for attribute in list_attributes:
+            td = html_file.new_tag("td")
+
+            if attribute == "1970-01-01 00:00:00":
+                td.string = "---"
+            else:
+                td.string = attribute
+
+            tr_photo.append(td)
+
+        td = html_file.new_tag("td")
+        img = html_file.new_tag("img")
+        img['src'] = path
+        img['width'] = "200"
+        img['height'] = "200"
+        img['alt'] = "Image error"
+        td.append(img)
+        tr_photo.append(td)
+
+        photos = html_file.select("#photo-table")[0]
+        photos.append(tr_photo)
 
     def add_to_contact_book(self, html_file, display_name, address, timestamp, username):
         # Add chat to sidebar
@@ -248,12 +292,22 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         link = report.select(tag)[0]
         link['href'] = link_to
 
+    def save_photo(self, photo_bytes, base_dir, name):
+        path = os.path.join(base_dir, name)
+        try:
+            bis = ByteArrayInputStream(photo_bytes)
+            b_image2 = ImageIO.read(bis)
+            ImageIO.write(b_image2, "jpg", File(path) )
+        except Exception as e:
+            self.log(Level.SEVERE, "Error saving photo: " + str(e))
+        return path
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
     # The 'progressBar' object is of type ReportProgressPanel.
     #   See: http://sleuthkit.org/autopsy/docs/api-docs/4.4/classorg_1_1sleuthkit_1_1autopsy_1_1report_1_1_report_progress_panel.html
     def generateReport(self, baseReportDir, progressBar):
         self.log(Level.INFO, "Starting YPA report module")
 
+        self.temp_dir = Case.getCurrentCase().getTempDirectory()
         # Count execution time
         start_time = time.time()
 
@@ -270,7 +324,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         art_list_messages = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_MESSAGE_%'")
         art_list_contacts = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_CONTACTS_%'")
-        total_artifact_count = len(art_list_messages) + len(art_list_contacts)
+        art_list_photos = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_PHOTO_%'")
+        total_artifact_count = len(art_list_messages) + len(art_list_contacts) + len(art_list_photos)
 
 
 
@@ -281,7 +336,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             progressBar.complete(ReportStatus.ERROR)
             return
 
-        # Dividing by ten because progress bar shouldn't be updated too frequently
+        # Progress bar shouldn't be updated too frequently
         # So we'll update it every X artifacts (defined by a constant)
         # Plus 2 for 2 additional steps
         max_progress = (ceil(total_artifact_count / NUM_ARTIFACTS_PROGRESS) + 2)
@@ -301,6 +356,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Get template path
         template_name_book = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_address_book.html")
 
+        # Get html_file_name
+        html_file_name_photos = os.path.join(baseReportDir, self.getRelativeFilePathPhotos())
+        # Get template path
+        template_name_photos = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_photos.html")
+
         with open(template_name_chats) as base_dir:
             txt = base_dir.read()
             html_ypa = bs4.BeautifulSoup(txt)
@@ -308,10 +368,14 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         with open(template_name_book) as base_dir:
             txt = base_dir.read()
             html_ypa_book = bs4.BeautifulSoup(txt)
+        
+        with open(template_name_photos) as base_dir:
+            txt = base_dir.read()
+            html_ypa_photos = bs4.BeautifulSoup(txt)
 
         self.add_link_to_html_report(html_ypa, "#address-book", self.getRelativeFilePathAddressBook())
         self.add_link_to_html_report(html_ypa_book, "#conversations", self.getRelativeFilePath())
-
+        
         # Get Attribute types
         att_thread_id = skCase.getAttributeType("YPA_THREAD_ID")
         att_body = skCase.getAttributeType("YPA_BODY")
@@ -326,6 +390,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         att_times_contacted = skCase.getAttributeType("YPA_TIMES_CONTACTED")
         att_last_contacted = skCase.getAttributeType("YPA_LAST_CONTACT_TIME")
         att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
+
+        att_photo_id = skCase.getAttributeType("YPA_PHOTO_ID")
+        att_pic_size = skCase.getAttributeType("YPA_PIC_SIZE")
+        att_uri = skCase.getAttributeType("YPA_URI")
 
         art_count = 0
         attribute_type = self.configPanel.getAttTypeList()[self.configPanel.getSelectedAddressBookOrderIndex()]
@@ -373,6 +441,28 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         for (t_id, t_list) in dict_thread_ids.iteritems():
             self.add_total_msgs_to_chat(html_ypa, t_id, t_list[0], t_list[1])
 
+        progressBar.updateStatusLabel("Generating photos from BLOBs")
+
+        for artifact in art_list_photos:
+            photo_id = artifact.getAttribute(att_photo_id).getValueString()
+            name = artifact.getAttribute(att_display_name).getValueString()
+            last_updated = artifact.getAttribute(att_last_updated).getValueString()
+            size = artifact.getAttribute(att_pic_size).getValueString()
+            uri = artifact.getAttribute(att_uri).getValueString()
+            # TO-DO: Optimize DB connections
+            username = artifact.getArtifactTypeName().split('_')[-1]
+            source_file = skCase.getAbstractFileById(artifact.getObjectID())
+            db_conn, db_path = db_functions.create_db_conn(self, source_file)
+            query = "select thumbnail, blob from photo where photo_id = " + photo_id
+            rs = db_functions.execute_query(self, query, db_conn)
+            rs.next()
+            
+            path = self.save_photo(rs.getBytes('blob'), baseReportDir, name)
+            
+            self.add_to_photos(html_ypa_photos, username, photo_id, path, [name, last_updated, size, uri])
+
+            db_functions.close_db_conn(self, db_conn, db_path)
+
         progressBar.updateStatusLabel("Saving report")
 
         with open(html_file_name, "w") as outf:
@@ -380,6 +470,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         with open(html_file_name_book, "w") as outf:
             outf.write(str(html_ypa_book))
+        
+        with open(html_file_name_photos, "w") as outf:
+            outf.write(str(html_ypa_photos))
 
         Case.getCurrentCase().addReport(html_file_name, self.moduleName, "YPA Report")
 

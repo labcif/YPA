@@ -24,8 +24,6 @@ from org.python.core.util import StringUtil
 from java.lang import Class
 from java.lang import System
 from java.sql import DriverManager, SQLException
-from org.sqlite import SQLiteConfig, SQLiteOpenMode
-from org.sqlite.SQLiteConfig import JournalMode
 from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.datamodel import SleuthkitCase
@@ -50,6 +48,8 @@ from org.sleuthkit.autopsy.casemodule.services import Services
 from org.sleuthkit.autopsy.casemodule.services import FileManager
 from org.sleuthkit.autopsy.datamodel import ContentUtils
 from org.sleuthkit.autopsy.coreutils.MessageNotifyUtil import Message
+
+from db import db_functions
 
 # Factory that defines the name and details of the module and allows Autopsy
 # to create instances of the modules that will do the analysis.
@@ -139,36 +139,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.log(Level.INFO, "Error creating attribute type: " + att_desc)
         return skCase.getAttributeType(att_name)
 
-    def execute_query(self, query, db):
-        try:
-            return db.createStatement().executeQuery(query)
-        except SQLException as e:
-            self.log(Level.SEVERE, "Failed to execute query: " + query + ", due to " + str(e))
-        return
-
-    def create_db_conn(self, file):
-        dbPath = os.path.join(self.temp_dir , str(file.getName()))
-        ContentUtils.writeToFile(file, File(dbPath))
-        try:
-            Class.forName("org.sqlite.JDBC").newInstance()
-            config = SQLiteConfig()
-            config.setEncoding(SQLiteConfig.Encoding.UTF8)
-            config.setJournalMode(JournalMode.WAL)
-            config.setReadOnly(True)
-            return DriverManager.getConnection(
-                "jdbc:sqlite:%s" % dbPath, config.toProperties()), dbPath
-        except Exception as e:
-            self.log(Level.SEVERE, "Could not create database connection for " +
-                        dbPath + " (" + str(e) + ")")
-        return None, dbPath
-    
-    def close_db_conn(self, db_conn, db_path):
-        db_conn.close()
-        try:
-            os.remove(db_path)
-        except (Exception, OSError) as e:
-            self.log(Level.SEVERE, "Error deleting temporary DB: " + str(e))
-
     # Where any setup and configuration is done
     # 'context' is an instance of org.sleuthkit.autopsy.ingest.IngestJobContext.
     # See: http://sleuthkit.org/autopsy/docs/api-docs/3.1/classorg_1_1sleuthkit_1_1autopsy_1_1ingest_1_1_ingest_job_context.html
@@ -250,7 +220,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.log(Level.INFO, "found " + str(numFiles) + " files")
         self.anyValidFileFound = False
         for file in files:
-            dbConn, dbPath = self.create_db_conn(file)
+            dbConn, dbPath = db_functions.create_db_conn(self, file)
             try:
                 full_path = (file.getParentPath() + file.getName()) 
                 split = full_path.split('/')                  
@@ -271,15 +241,15 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, str(e))
                     continue
 
-                self.processContacts(self.execute_query(self.contact_query, dbConn),file,blackboard,skCase)
+                self.processContacts(db_functions.execute_query(self, self.contact_query, dbConn),file,blackboard,skCase)
 
-                self.processMessages(self.execute_query(self.messages_query, dbConn),file,blackboard,skCase)
+                self.processMessages(db_functions.execute_query(self, self.messages_query, dbConn),file,blackboard,skCase)
                 
-                self.processMms(self.execute_query(self.mms_query, dbConn),file,blackboard,skCase)
+                self.processMms(db_functions.execute_query(self, self.mms_query, dbConn),file,blackboard,skCase)
                 
                 self.anyValidFileFound = True
 
-                prag_uv = self.execute_query("pragma user_version", dbConn)
+                prag_uv = db_functions.execute_query(self, "pragma user_version", dbConn)
 
                 art = file.newArtifact(self.art_settings.getTypeID())
                 prag_uv.next()
@@ -340,7 +310,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 continue
             finally:
                 # Close existing DB connections and remove temp DBs
-                self.close_db_conn(dbConn, dbPath)
+                db_functions.close_db_conn(self, dbConn, dbPath)
             
             # Recent photos (Not the photos in photos.db)
             try:
@@ -460,9 +430,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
 
     def process_photos(self, db, blackboard, skCase):
-        db_conn, db_path = self.create_db_conn(db)
+        db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        photos = self.execute_query(self.photos_query, db_conn)
+        photos = db_functions.execute_query(self, self.photos_query, db_conn)
         if not photos:
             return
         
@@ -483,7 +453,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.log(Level.SEVERE, str(e))
             return None
 
-        self.close_db_conn(db_conn, db_path)
+        db_functions.close_db_conn(self, db_conn, db_path)
 
 class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
     serialVersionUID = 1L

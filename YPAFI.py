@@ -162,6 +162,12 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         dbPath + " (" + str(e) + ")")
         return None, dbPath
     
+    def close_db_conn(self, db_conn, db_path):
+        db_conn.close()
+        try:
+            os.remove(db_path)
+        except (Exception, OSError) as e:
+            self.log(Level.SEVERE, "Error deleting temporary DB: " + str(e))
 
     # Where any setup and configuration is done
     # 'context' is an instance of org.sleuthkit.autopsy.ingest.IngestJobContext.
@@ -227,7 +233,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, ifnull(m.from_address,'self') as from_address, datetime(m.timestamp/ 10000000 - 11644473600,'unixepoch') as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
         self.mms_query = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address from mms_part mp left join mms mm on mp.message_id = mm.message_id left join mms_address ma on mp.message_id = ma.message_id left join address a on ma.address = a.address left join contact c on a.contact_id = c.contact_id where ma.address not like 'insert-address-token' "
         self.address_types = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}
-        self.photos_query = "select photo_id, name, datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time, size, uri, thumbnail, blob from photo" 
+        self.photos_query = "select photo_id, name, datetime(last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time, size, uri, thumbnail, blob from photo" 
         
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
@@ -282,8 +288,22 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
                 # Other YP databases (photos.db, notifications.db, settings.db)
                 dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
-                dbs = [item for item in dbs if "phone.db" not in item.getName()]
-                self.log(Level.INFO, "Number of dbs: " + str(len(dbs)))
+                # dbs = [item for item in dbs if "phone.db" not in item.getName()]
+                for db in dbs:
+                    db_name = db.getName()
+                    if "phone.db" in db_name:
+                        continue
+                    if "notifications.db" in db_name:
+                        # self.process_notifications(db)
+                        continue
+                    if "settings.db" in db_name:
+                        # self.process_settings(db)
+                        continue
+                    if "photos.db" in db_name:
+                        self.process_photos(db, blackboard, skCase)
+                        continue
+                
+                # self.log(Level.INFO, "Number of dbs: " + str(len(dbs)))
                 # Undark and mdg
                 if PlatformUtil.isWindowsOS():                
                     try:
@@ -320,11 +340,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 continue
             finally:
                 # Close existing DB connections and remove temp DBs
-                dbConn.close()
-                try:
-                    os.remove(dbPath)
-                except (Exception, OSError) as e:
-                    self.log(Level.SEVERE, str(e))
+                self.close_db_conn(dbConn, dbPath)
             
             # Recent photos (Not the photos in photos.db)
             try:
@@ -441,6 +457,33 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         except Exception as e:
             self.log(Level.SEVERE, str(e))
             return None
+
+
+    def process_photos(self, db, blackboard, skCase):
+        db_conn, db_path = self.create_db_conn(db)
+
+        photos = self.execute_query(self.photos_query, db_conn)
+        if not photos:
+            return
+        
+        try:
+            while photos.next():
+                art = db.newArtifact(self.art_photo.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_photo_id, YourPhoneIngestModuleFactory.moduleName, photos.getString('photo_id')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, photos.getString('name')))
+                art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, photos.getString('last_updated_time')))
+                art.addAttribute(BlackboardAttribute(self.att_pic_size, YourPhoneIngestModuleFactory.moduleName, photos.getLong('size')))
+                art.addAttribute(BlackboardAttribute(self.att_uri, YourPhoneIngestModuleFactory.moduleName, photos.getString('uri')))
+                # blob_bytes = photos.getBytes('thumbnail')
+                # art.addAttribute(BlackboardAttribute(self.att_photo_thumbnail, YourPhoneIngestModuleFactory.moduleName, blob_bytes))
+                # blob_bytes = photos.getBytes('blob')
+                # art.addAttribute(BlackboardAttribute(self.att_photo, YourPhoneIngestModuleFactory.moduleName, blob_bytes))
+                self.index_artifact(blackboard, art, self.art_photo)
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+            return None
+
+        self.close_db_conn(db_conn, db_path)
 
 class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
     serialVersionUID = 1L

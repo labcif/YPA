@@ -233,6 +233,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         img = html_file.new_tag("img")
         img['src'] = path
+        img['class'] = "img-responsive"
         div_body.append(img)
 
         div_content.append(div_body)
@@ -288,8 +289,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         td = html_file.new_tag("td")
         img = html_file.new_tag("img")
         img['src'] = path
-        img['width'] = "200"
-        img['height'] = "200"
+        # img['width'] = "200"
+        # img['height'] = "200"
+        img['class'] = "img-fluid img-thumbnail"
         img['alt'] = "Image error"
         td.append(img)
         tr_photo.append(td)
@@ -482,16 +484,28 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         progressBar.updateStatusLabel("Generating photos from BLOBs")
 
+        last_obj_id = None
+        db_conn = None
+        db_path = None
         for artifact in art_list_photos:
+            # Get artifact info
             photo_id = artifact.getAttribute(att_photo_id).getValueString()
             name = artifact.getAttribute(att_display_name).getValueString()
             last_updated = artifact.getAttribute(att_last_updated).getValueString()
             size = artifact.getAttribute(att_pic_size).getValueString()
             uri = artifact.getAttribute(att_uri).getValueString()
-            # TO-DO: Optimize DB connections
             username = artifact.getArtifactTypeName().split('_')[-1]
-            source_file = skCase.getAbstractFileById(artifact.getObjectID())
-            db_conn, db_path = db_functions.create_db_conn(self, source_file)
+            artifact_obj_id = artifact.getObjectID()
+            source_file = skCase.getAbstractFileById(artifact_obj_id)
+
+            # If the DB is different, close old conn and create new one
+            if db_conn and db_path and artifact_obj_id != last_obj_id:
+                db_functions.close_db_conn(self, db_conn, db_path)
+                db_conn, db_path = db_functions.create_db_conn(self, source_file)
+            else:
+                if not db_conn and not db_path:
+                    db_conn, db_path = db_functions.create_db_conn(self, source_file)
+            
             query = "select thumbnail, blob from photo where photo_id = " + photo_id
             rs = db_functions.execute_query(self, query, db_conn)
             rs.next()
@@ -500,7 +514,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             self.add_photo_modal(html_ypa_photos, path, photo_id, username)
             self.add_to_photos(html_ypa_photos, username, photo_id, path, [name, last_updated, size, uri])
 
-            db_functions.close_db_conn(self, db_conn, db_path)
+            last_obj_id = artifact_obj_id
 
         progressBar.updateStatusLabel("Saving report")
 

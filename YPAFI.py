@@ -232,9 +232,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.anyValidFileFound = False
         for file in files:
             full_path = (file.getParentPath() + file.getName()) 
-            self.log(Level.INFO, "Opening " +  full_path)
             dbConn, dbPath = db_functions.create_db_conn(self, file)
-            self.log(Level.INFO, "Successfully opened " +  full_path)
             try:
                 split = full_path.split('/')                  
                 try:
@@ -329,18 +327,15 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             
             # Recent photos (Not the photos in photos.db)
             try:
-                full_path = (file.getParentPath() + file.getName()) 
+                full_path = (file.getParentPath() + file.getName())
                 split = full_path.split('/')
                 guidPath = '/'.join(split[:-3])
-                usrPath = guidPath+'/User'       
-                self.log(Level.INFO, usrPath)
+                usrPath = guidPath+'/User'
                 ufiles = fileManager.findFiles(dataSource, '%', usrPath)
-                self.log(Level.INFO, ufiles[0].getName())
                 for ufile in ufiles:
                     rpPath = ufile.getParentPath() + ufile.getName() +'/Recent Photos/' 
                     picfiles = fileManager.findFiles(dataSource, '%', rpPath)
                     for pic in picfiles:
-                        self.log(Level.INFO, pic.getName())
                         # Make an artifact
                         art = pic.newArtifact(self.art_pictures.getTypeID())
                         # Register file size

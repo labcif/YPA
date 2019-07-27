@@ -24,7 +24,7 @@ def create_db_conn(self, file, temp_dir = None):
         config = SQLiteConfig()
         config.setEncoding(SQLiteConfig.Encoding.UTF8)
         config.setJournalMode(JournalMode.WAL)
-        config.setReadOnly(True)
+        # config.setReadOnly(True)
         return DriverManager.getConnection(
             "jdbc:sqlite:%s" % dbPath, config.toProperties()), dbPath
     except Exception as e:

@@ -233,7 +233,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         img = html_file.new_tag("img")
         img['src'] = path
-        img['class'] = "img-responsive"
+        img['class'] = "img-fluid"
         div_body.append(img)
 
         div_content.append(div_body)

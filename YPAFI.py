@@ -7,6 +7,7 @@ import json
 import sys
 import csv
 import mdgMod
+import json
 
 from javax.swing import JList
 from javax.swing import JTextArea
@@ -116,7 +117,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             blackboard.indexArtifact(artifact)
         except Blackboard.BlackboardException:
             self.log(Level.INFO, "Error indexing artifact " +
-                     artifact.getDisplayName())
+                     artifact.getDisplayName() + "" +str(e))
         # Fire an event to notify the UI and others that there is a new log artifact
         IngestServices.getInstance().fireModuleDataEvent(
             ModuleDataEvent(YourPhoneIngestModuleFactory.moduleName,
@@ -173,7 +174,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_message_id = self.create_attribute_type('YPA_MESSAGE_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message ID", skCase) 
         self.att_recipient_list = self.create_attribute_type('YPA_RECIPIENT_LIST', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Recipients", skCase) 
         self.att_from_address = self.create_attribute_type('YPA_FROM_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING , "Address", skCase) 
-        self.att_body = self.create_attribute_type('YPA_BODY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message Body", skCase) 
+        self.att_body = self.create_attribute_type('YPA_BODY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message body", skCase) 
         self.att_status = self.create_attribute_type('YPA_STATUS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase)         
         self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Timestamp", skCase)      
 
@@ -208,6 +209,12 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_setting_type = self.create_attribute_type('YPA_SETTING_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting type", skCase)
         self.att_setting_value = self.create_attribute_type('YPA_SETTING_VALUE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting value", skCase)
 
+        # Notifications from notifications.db
+        self.att_post_time = self.create_attribute_type('YPA_POST_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Post time", skCase)
+        self.att_notification_id = self.create_attribute_type('YPA_NOTIFICATION_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Notification ID", skCase)
+        self.att_anon_id = self.create_attribute_type('YPA_ANON_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Anonymous ID", skCase)
+        self.att_state = self.create_attribute_type('YPA_STATE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "State", skCase)
+
         # DB queries
         self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, datetime(a.last_contacted_time / 10000000 - 11644473600,'unixepoch') as last_contacted_time,  datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
         self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, CASE WHEN ifnull(m.from_address,'self') = '' THEN 'self' ELSE ifnull(m.from_address,'self') END as from_address, datetime(m.timestamp/ 10000000 - 11644473600,'unixepoch') as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
@@ -216,6 +223,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.photos_query = "select photo_id, name, datetime(last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time, size, uri, thumbnail, blob from photo" 
         self.apps_query = "select app_name, package_name, version, etag from phone_apps"
         self.settings_query = "select setting_group_id, setting_key, setting_type, setting_value from settings"
+        self.notifications_query = "select notification_id, json, datetime(post_time/ 10000000 - 11644473600,'unixepoch') as post_time, state, anonymous_id from notifications"
 
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
@@ -250,6 +258,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.art_photo = self.create_artifact_type("YPA_PHOTO_" + userName, "User " + userName + " - Photos", skCase)
                     self.art_phone_app = self.create_artifact_type("YPA_PHONE_APP_" + userName, "User " + userName + " - Phone apps", skCase)
                     self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + userName, "User " + userName + " - Phone settings", skCase)
+                    self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + userName, "User " + userName + " - Notifications", skCase)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
@@ -277,7 +286,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     if "phone.db" in db_name:
                         continue
                     if "notifications.db" in db_name:
-                        # self.process_notifications(db)
+                        self.process_notifications(db, blackboard, skCase)
                         continue
                     if "settings.db" in db_name:
                         self.process_settings(db, blackboard, skCase)
@@ -496,6 +505,35 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 self.log(Level.SEVERE, str(e))
 
         db_functions.close_db_conn(self, db_conn, db_path)
+
+    def process_notifications(self, db, blackboard, skCase):
+        db_conn, db_path = db_functions.create_db_conn(self, db)
+
+        notifications = db_functions.execute_query(self, self.notifications_query, db_conn)
+        
+        if not notifications:
+            return
+        
+        try:
+            while notifications.next():
+                j = notifications.getString('json')
+                self.log(Level.INFO, "Json: " + j)
+                art = db.newArtifact(self.art_phone_notification.getTypeID())
+                notific = Notification(j)
+                art.addAttribute(BlackboardAttribute(self.att_notification_id, YourPhoneIngestModuleFactory.moduleName, notifications.getString('notification_id')))
+                art.addAttribute(BlackboardAttribute(self.att_post_time, YourPhoneIngestModuleFactory.moduleName, notifications.getString('post_time')))
+                art.addAttribute(BlackboardAttribute(self.att_state, YourPhoneIngestModuleFactory.moduleName, notifications.getString('state')))
+                art.addAttribute(BlackboardAttribute(self.att_anon_id, YourPhoneIngestModuleFactory.moduleName, notifications.getString('anonymous_id')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, notific.title))
+                self.index_artifact(blackboard, art, self.art_phone_notification)
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+        
+        db_functions.close_db_conn(self, db_conn, db_path)
+
+class Notification(object):
+    def __init__(self, j):
+        self.__dict__ = json.loads(j, encoding='utf-8')
 
 class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
     serialVersionUID = 1L

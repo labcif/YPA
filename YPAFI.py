@@ -519,10 +519,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         try:
             while notifications.next():
                 # TODO: Change timestamp to datetime atribute type (in every use)
-                j = notifications.getString('json')
-                self.log(Level.INFO, "Json: " + j)
                 art = db.newArtifact(self.art_phone_notification.getTypeID())
-                notific = Notification(j)
+                notific = Notification(notifications.getString('json'))
                 art.addAttribute(BlackboardAttribute(self.att_notification_id, YourPhoneIngestModuleFactory.moduleName, notifications.getString('notification_id')))
                 art.addAttribute(BlackboardAttribute(self.att_post_time, YourPhoneIngestModuleFactory.moduleName, notifications.getString('post_time')))
                 art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, notific.appName))

@@ -510,9 +510,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             rs = db_functions.execute_query(self, query, db_conn)
             rs.next()
             
-            path = self.save_photo(rs.getBytes('blob'), baseReportDir, name)
-            self.add_photo_modal(html_ypa_photos, path, photo_id, username)
-            self.add_to_photos(html_ypa_photos, username, photo_id, path, [name, last_updated, size, uri])
+            self.save_photo(rs.getBytes('blob'), baseReportDir, name)
+            self.add_photo_modal(html_ypa_photos, name, photo_id, username)
+            self.add_to_photos(html_ypa_photos, username, photo_id, name, [name, last_updated, size, uri])
 
             last_obj_id = artifact_obj_id
 

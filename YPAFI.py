@@ -214,6 +214,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_notification_id = self.create_attribute_type('YPA_NOTIFICATION_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Notification ID", skCase)
         self.att_anon_id = self.create_attribute_type('YPA_ANON_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Anonymous ID", skCase)
         self.att_state = self.create_attribute_type('YPA_STATE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "State", skCase)
+        self.att_full_json = self.create_attribute_type('YPA_FULL_JSON', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Full JSON", skCase)
+        self.att_text = self.create_attribute_type('YPA_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", skCase)
 
         # DB queries
         self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, datetime(a.last_contacted_time / 10000000 - 11644473600,'unixepoch') as last_contacted_time,  datetime(c.last_updated_time/ 10000000 - 11644473600,'unixepoch') as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
@@ -516,15 +518,20 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         
         try:
             while notifications.next():
+                # TODO: Change timestamp to datetime atribute type (in every use)
                 j = notifications.getString('json')
                 self.log(Level.INFO, "Json: " + j)
                 art = db.newArtifact(self.art_phone_notification.getTypeID())
                 notific = Notification(j)
                 art.addAttribute(BlackboardAttribute(self.att_notification_id, YourPhoneIngestModuleFactory.moduleName, notifications.getString('notification_id')))
                 art.addAttribute(BlackboardAttribute(self.att_post_time, YourPhoneIngestModuleFactory.moduleName, notifications.getString('post_time')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, notific.appName))
+                art.addAttribute(BlackboardAttribute(self.att_package_name, YourPhoneIngestModuleFactory.moduleName, notific.packageName))
+                art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, str(notific.timestamp)))
+                art.addAttribute(BlackboardAttribute(self.att_text, YourPhoneIngestModuleFactory.moduleName, notific.text))
+                art.addAttribute(BlackboardAttribute(self.att_full_json, YourPhoneIngestModuleFactory.moduleName, notific.full_json))
                 art.addAttribute(BlackboardAttribute(self.att_state, YourPhoneIngestModuleFactory.moduleName, notifications.getString('state')))
                 art.addAttribute(BlackboardAttribute(self.att_anon_id, YourPhoneIngestModuleFactory.moduleName, notifications.getString('anonymous_id')))
-                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, notific.title))
                 self.index_artifact(blackboard, art, self.art_phone_notification)
         except Exception as e:
             self.log(Level.SEVERE, str(e))
@@ -534,6 +541,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 class Notification(object):
     def __init__(self, j):
         self.__dict__ = json.loads(j, encoding='utf-8')
+        self.full_json = json.dumps(self.__dict__, indent=4, sort_keys=True)
 
 class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
     serialVersionUID = 1L

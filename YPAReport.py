@@ -219,6 +219,14 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         h_title.string = "Zoomed photo"
         div_header.append(h_title)
 
+        # Fullsize button<button type="button" class="btn btn-primary">Primary</button>
+        button = html_file.new_tag("a")
+        button['href'] = path
+        button['class'] = "btn btn-primary"
+        button.string = "Open in fullscreen"
+        # button['target'] = "_blank"
+        div_header.append(button)
+
         button_close = html_file.new_tag("button")
         button_close['class'] = "close"
         button_close['data-dismiss'] = "modal"
@@ -230,7 +238,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         div_body = html_file.new_tag("div")
         div_body['class'] = "modal-body"
-
+        
+        # Image
         img = html_file.new_tag("img")
         img['src'] = path
         img['class'] = "img-fluid"

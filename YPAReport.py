@@ -88,7 +88,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def get_sanitized_address(self, address):
         return address.replace('+','plus')
 
-    def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user, address, username):
+    def add_msg_to_html_report(self, html_file, thread_id, body, timestamp, from_user, address, username, guid):
         html_chat_id = HTML_COLLAPSE_PREFIX + thread_id
         div_msg = html_file.new_tag("div")
         span_time = html_file.new_tag("span")
@@ -100,7 +100,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         else:
             div_msg['class'] = "container text-right"
             div_msg['data-toggle'] = "modal"
-            div_msg['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address) + username
+            div_msg['data-target'] = HTML_MODAL_PREFIX + self.get_sanitized_address(address) + guid + username 
             span_time['class'] = "time-right"
 
 
@@ -449,10 +449,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         attribute_type = self.configPanel.getAttTypeList()[self.configPanel.getSelectedAddressBookOrderIndex()]
         for artifact in sorted(art_list_contacts, key = lambda (a): a.getAttribute(attribute_type).getDisplayString()):
             username = artifact.getArtifactTypeName().split('_')[-1]
+            guid = artifact.getArtifactTypeName().split('_')[-2]
             att_list = []
             contact_id = artifact.getAttribute(att_contact_id).getDisplayString()
-            id_for_contact = artifact.getAttribute(att_address).getDisplayString()
-            att_list.append(id_for_contact)
+            address = artifact.getAttribute(att_address).getDisplayString()
+            id_for_contact = address + guid
+            att_list.append(address)
             att_list.append(artifact.getAttribute(att_display_name).getDisplayString())
             att_list.append(artifact.getAttribute(att_address_type).getDisplayString())
             att_list.append(artifact.getAttribute(att_times_contacted).getDisplayString())
@@ -466,8 +468,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         dict_thread_ids = {}
         for artifact in art_list_messages:
             username = artifact.getArtifactTypeName().split('_')[-1]
+            guid = artifact.getArtifactTypeName().split('_')[-2]
             # Overall chat details
-            thread_id = artifact.getAttribute(att_thread_id).getValueString() + username
+            thread_id = artifact.getAttribute(att_thread_id).getValueString() + username + guid
             display_name = artifact.getAttribute(att_display_name).getValueString()
             chat_name = artifact.getAttribute(att_recipient_list).getValueString() + " (user: " + username + ")"
             address = artifact.getAttribute(att_from_address).getValueString()
@@ -484,7 +487,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 dict_thread_ids[thread_id][0] += 1
                 dict_thread_ids[thread_id][1] = timestamp
 
-            self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address, username)
+            self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address, username, guid)
 
             art_count = self.increment_progress_bar(progressBar, art_count)
 
@@ -504,6 +507,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             size = artifact.getAttribute(att_pic_size).getValueString()
             uri = artifact.getAttribute(att_uri).getValueString()
             username = artifact.getArtifactTypeName().split('_')[-1]
+            # guid = artifact.getArtifactTypeName().split('_')[-2]
             artifact_obj_id = artifact.getObjectID()
             source_file = skCase.getAbstractFileById(artifact_obj_id)
 
@@ -541,7 +545,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Elapsed time
         elapsed_time = time.time() - start_time
 
-        self.log(Level.INFO, "YPA Report module took "+str(elapsed_time) + "s")
+        self.log(Level.INFO, "YPA Report module took " + str(elapsed_time) + "s")
 
         # Call this with ERROR if report was not generated
         progressBar.complete(ReportStatus.COMPLETE)

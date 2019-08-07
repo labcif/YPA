@@ -247,20 +247,22 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 split = full_path.split('/')                  
                 try:
                     try:
-                        userName = split[-11]
+                        username = split[-11]
+                        guid = split[-4]
+                        self.log(Level.INFO, "GUID: " + guid)
                     except IndexError:
-                        userName = "UNKNOWN"
-                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_" + userName,"User " + userName + " - Contacts", skCase)
-                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_" + userName,"User " + userName + " - SMS", skCase)
-                    self.art_mms = self.create_artifact_type("YPA_MMS_" + userName,"User " + userName + " - MMS", skCase)
-                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_" + userName,"User " + userName +  " - Recent pictures", skCase)
-                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_" + userName,"User " + userName +  " - Rows recovered (undark)", skCase)
-                    self.art_dp = self.create_artifact_type("YPA_DP_" + userName,"User " + userName + " - Rows recovered (Delete parser)", skCase)
-                    self.art_settings = self.create_artifact_type("YPA_SETTINGS_" + userName,"User " + userName + " - Database settings", skCase)
-                    self.art_photo = self.create_artifact_type("YPA_PHOTO_" + userName, "User " + userName + " - Photos", skCase)
-                    self.art_phone_app = self.create_artifact_type("YPA_PHONE_APP_" + userName, "User " + userName + " - Phone apps", skCase)
-                    self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + userName, "User " + userName + " - Phone settings", skCase)
-                    self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + userName, "User " + userName + " - Notifications", skCase)
+                        username = "UNKNOWN"
+                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_" + guid + "_" + username,"User " + username + " - Contacts", skCase)
+                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_" + guid + "_" + username,"User " + username + " - SMS", skCase)
+                    self.art_mms = self.create_artifact_type("YPA_MMS_" + guid + "_" + username,"User " + username + " - MMS", skCase)
+                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_" + guid + "_" + username,"User " + username +  " - Recent pictures", skCase)
+                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_" + guid + "_" + username,"User " + username +  " - Rows recovered (undark)", skCase)
+                    self.art_dp = self.create_artifact_type("YPA_DP_" + guid + "_" + username,"User " + username + " - Rows recovered (Delete parser)", skCase)
+                    self.art_settings = self.create_artifact_type("YPA_SETTINGS_" + guid + "_" + username,"User " + username + " - Database settings", skCase)
+                    self.art_photo = self.create_artifact_type("YPA_PHOTO_" + guid + "_" + username, "User " + username + " - Photos", skCase)
+                    self.art_phone_app = self.create_artifact_type("YPA_PHONE_APP_" + guid + "_" + username, "User " + username + " - Phone apps", skCase)
+                    self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + guid + "_" + username, "User " + username + " - Phone settings", skCase)
+                    self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + guid + "_" + username, "User " + username + " - Notifications", skCase)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
@@ -539,7 +541,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 class Notification(object):
     def __init__(self, j):
         self.__dict__ = json.loads(j, encoding='utf-8')
-        self.full_json = json.dumps(self.__dict__, indent=4, sort_keys=True)
+        self.full_json = json.dumps(self.__dict__, indent=4, sort_keys=True, encoding='utf-8')
 
 class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
     serialVersionUID = 1L

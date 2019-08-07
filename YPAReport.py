@@ -7,6 +7,8 @@ import time
 
 from math import ceil
 from java.lang import System
+from java.util import Date, TimeZone
+from java.text import SimpleDateFormat
 from java.util.logging import Level
 from org.sleuthkit.autopsy.casemodule import Case
 from org.sleuthkit.autopsy.casemodule.services import Services
@@ -278,7 +280,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         for attribute in list_att:
             td = html_file.new_tag("td")
 
-            if attribute == "1970-01-01 00:00:00":
+            if attribute == "1970-01-01T00:00:00Z":
                 td.string = "---"
             else:
                 td.string = attribute
@@ -346,6 +348,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         except Exception as e:
             self.log(Level.SEVERE, "Error saving photo: " + str(e))
         return path
+    
+    def unix_to_date_string(self, unix):
+        date = Date(unix * 1000)
+        df = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX");
+        df.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return df.format(date)
     
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
     # The 'progressBar' object is of type ReportProgressPanel.
@@ -458,8 +466,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             att_list.append(artifact.getAttribute(att_display_name).getDisplayString())
             att_list.append(artifact.getAttribute(att_address_type).getDisplayString())
             att_list.append(artifact.getAttribute(att_times_contacted).getDisplayString())
-            att_list.append(artifact.getAttribute(att_last_contacted).getDisplayString())
-            att_list.append(artifact.getAttribute(att_last_updated).getDisplayString())
+            att_list.append(self.unix_to_date_string(artifact.getAttribute(att_last_contacted).getValueLong()))
+            att_list.append(self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong()))
             self.add_contact_modal(html_ypa, artifact, id_for_contact, username)
             # self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
             self.add_to_address_book(html_ypa_book, contact_id, att_list, username)
@@ -478,7 +486,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
             # Message details
             body = artifact.getAttribute(att_body).getValueString()
-            timestamp = artifact.getAttribute(att_timestamp).getValueString()
+            timestamp = self.unix_to_date_string(artifact.getAttribute(att_timestamp).getValueLong())
             if not dict_thread_ids.get(thread_id):
                 # Create Chat
                 dict_thread_ids[thread_id] = [1, timestamp]
@@ -503,7 +511,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             # Get artifact info
             photo_id = artifact.getAttribute(att_photo_id).getValueString()
             name = artifact.getAttribute(att_display_name).getValueString()
-            last_updated = artifact.getAttribute(att_last_updated).getValueString()
+            last_updated = self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong())
             size = artifact.getAttribute(att_pic_size).getValueString()
             uri = artifact.getAttribute(att_uri).getValueString()
             username = artifact.getArtifactTypeName().split('_')[-1]

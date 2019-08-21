@@ -351,8 +351,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     
     def unix_to_date_string(self, unix):
         date = Date(unix * 1000)
-        df = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX");
-        df.setTimeZone(TimeZone.getTimeZone("UTC"));
+        df = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX")
+        df.setTimeZone(TimeZone.getTimeZone("UTC"))
         return df.format(date)
     
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
@@ -559,7 +559,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         progressBar.complete(ReportStatus.COMPLETE)
 
     def getConfigurationPanel(self):
-        self.configPanel = LFA_ConfigPanel()
+        self.configPanel = YPA_ConfigPanel()
         return self.configPanel
 
 #########################################################################
@@ -573,7 +573,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 #                               |___/                                   #
 #########################################################################
 
-class LFA_ConfigPanel(JPanel):
+class YPA_ConfigPanel(JPanel):
 
     def __init__(self):
         self.initComponents()
@@ -598,7 +598,8 @@ class LFA_ConfigPanel(JPanel):
         
         orderOptions = []
         for att in self.att_type_list:
-            orderOptions.append(att.getDisplayName())
+            if att:
+                orderOptions.append(att.getDisplayName())
         self.setLayout(FlowLayout())
 
         descriptionLabel = JLabel(" YPA - Your Phone Analyzer (Report module)")

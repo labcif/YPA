@@ -519,6 +519,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             artifact_obj_id = artifact.getObjectID()
             source_file = skCase.getAbstractFileById(artifact_obj_id)
 
+            if not source_file or not source_file.exists():
+                # getAbstractFileById can return null.
+                # Skip this photo in case source DB is not available.
+                self.log(Level.INFO, "No source DB for " + name)
+                continue
+            
             # If the DB is different, close old conn and create new one
             if db_conn and db_path and artifact_obj_id != last_obj_id:
                 db_functions.close_db_conn(self, db_conn, db_path)

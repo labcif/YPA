@@ -48,6 +48,7 @@ from org.sleuthkit.autopsy.casemodule.services import Services
 from org.sleuthkit.autopsy.casemodule.services import FileManager
 from org.sleuthkit.autopsy.datamodel import ContentUtils
 from org.sleuthkit.autopsy.coreutils.MessageNotifyUtil import Message
+from org.sleuthkit.autopsy.ingest import GenericIngestModuleJobSettings
 
 from db import db_functions
 
@@ -72,16 +73,22 @@ class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
         return "0.2"
 
     def getDefaultIngestJobSettings(self):
-        return YourPhoneWithUISettings()
+        # return YourPhoneWithUISettings()
+        return GenericIngestModuleJobSettings()
 
     def hasIngestJobSettingsPanel(self):
         return True
 
     def getIngestJobSettingsPanel(self, settings):
-        if not isinstance(settings, YourPhoneWithUISettings):
-            raise IllegalArgumentException("Expected settings argument to be instanceof YourPhoneWithUISettings")
+        # if not isinstance(settings, YourPhoneWithUISettings):
+        #    raise IllegalArgumentException("Expected settings argument to be instanceof YourPhoneWithUISettings")
+        # self.settings = settings
+        # return YourPhoneWithUISettingsPanel(self.settings)
+        if not isinstance(settings, GenericIngestModuleJobSettings):
+            settings = GenericIngestModuleJobSettings()
         self.settings = settings
         return YourPhoneWithUISettingsPanel(self.settings)
+
 
     def isDataSourceIngestModuleFactory(self):
         return True
@@ -155,7 +162,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         # Settings attributes
         self.att_dp_type = self.create_attribute_type('YPA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", skCase)
         self.att_dp_offset = self.create_attribute_type('YPA_DP_OFFSET', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Offset", skCase)
-        self.att_dp_lenght = self.create_attribute_type('YPA_DP_LENGHT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Lenght", skCase)
+        self.att_dp_length = self.create_attribute_type('YPA_DP_LENGTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Length", skCase)
         self.att_dp_data = self.create_attribute_type('YPA_DP_DATA', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data", skCase)
         
         # Address attributes
@@ -325,7 +332,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         art = file.newArtifact(self.art_dp.getTypeID())
                         art.addAttribute(BlackboardAttribute(self.att_dp_type, YourPhoneIngestModuleFactory.moduleName, str(line[0])))
                         art.addAttribute(BlackboardAttribute(self.att_dp_offset, YourPhoneIngestModuleFactory.moduleName, str(line[1])))
-                        art.addAttribute(BlackboardAttribute(self.att_dp_lenght, YourPhoneIngestModuleFactory.moduleName, str(line[2])))
+                        art.addAttribute(BlackboardAttribute(self.att_dp_length, YourPhoneIngestModuleFactory.moduleName, str(line[2])))
                         art.addAttribute(BlackboardAttribute(self.att_dp_data, YourPhoneIngestModuleFactory.moduleName, str(line[3])))
                         self.index_artifact(blackboard, art,self.art_dp)                 
                 except Exception as e:

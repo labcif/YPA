@@ -66,6 +66,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     
     def getRelativeFilePathPhotos(self):
         return "YPA_Photos_" + Case.getCurrentCase().getName() + ".html"
+    
+    def get_file_by_artifact(self, skCase, artifact):
+        return skCase.getAbstractFileById(artifact.getObjectID())
 
     def write_conversation_to_html(self, progressBar, art_count, artifact, html_file):
         row = html_file.new_tag("tr")
@@ -372,7 +375,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         skCase = Case.getCurrentCase().getSleuthkitCase()
 
-
         # Get artifact lists
         # art_list_custom_regex = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'TSK_LFA_CUSTOM_REGEX_%'")
 
@@ -458,16 +460,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         for artifact in sorted(art_list_contacts, key = lambda (a): a.getAttribute(attribute_type).getDisplayString()):
             username = artifact.getArtifactTypeName().split('_')[-1]
             guid = artifact.getArtifactTypeName().split('_')[-2]
-            att_list = []
             contact_id = artifact.getAttribute(att_contact_id).getDisplayString()
             address = artifact.getAttribute(att_address).getDisplayString()
             id_for_contact = address + guid
-            att_list.append(address)
-            att_list.append(artifact.getAttribute(att_display_name).getDisplayString())
-            att_list.append(artifact.getAttribute(att_address_type).getDisplayString())
-            att_list.append(artifact.getAttribute(att_times_contacted).getDisplayString())
-            att_list.append(self.unix_to_date_string(artifact.getAttribute(att_last_contacted).getValueLong()))
-            att_list.append(self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong()))
+            att_list = [address, artifact.getAttribute(att_display_name).getDisplayString(), artifact.getAttribute(att_address_type).getDisplayString(), \
+                artifact.getAttribute(att_times_contacted).getDisplayString(), self.unix_to_date_string(artifact.getAttribute(att_last_contacted).getValueLong()), \
+                self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong())]
             self.add_contact_modal(html_ypa, artifact, id_for_contact, username)
             # self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
             self.add_to_address_book(html_ypa_book, contact_id, att_list, username)
@@ -480,13 +478,15 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             # Overall chat details
             thread_id = artifact.getAttribute(att_thread_id).getValueString() + username + guid
             display_name = artifact.getAttribute(att_display_name).getValueString()
-            chat_name = artifact.getAttribute(att_recipient_list).getValueString() + " (user: " + username + ")"
+            recipients = artifact.getAttribute(att_recipient_list).getValueString()
+            chat_name = recipients + " (user: " + username + ")"
             address = artifact.getAttribute(att_from_address).getValueString()
             sender = display_name + " (" + address + ")"
 
             # Message details
             body = artifact.getAttribute(att_body).getValueString()
-            timestamp = self.unix_to_date_string(artifact.getAttribute(att_timestamp).getValueLong())
+            timestamp_unix = artifact.getAttribute(att_timestamp).getValueLong()
+            timestamp = self.unix_to_date_string(timestamp_unix)
             if not dict_thread_ids.get(thread_id):
                 # Create Chat
                 dict_thread_ids[thread_id] = [1, timestamp]
@@ -517,7 +517,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             username = artifact.getArtifactTypeName().split('_')[-1]
             # guid = artifact.getArtifactTypeName().split('_')[-2]
             artifact_obj_id = artifact.getObjectID()
-            source_file = skCase.getAbstractFileById(artifact_obj_id)
+            source_file = self.get_file_by_artifact(skCase, artifact)
 
             if not source_file or not source_file.exists():
                 # getAbstractFileById can return null.
@@ -533,17 +533,20 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 if not db_conn and not db_path:
                     db_conn, db_path = db_functions.create_db_conn(self, source_file)
             
-            query = "select thumbnail, blob from photo where photo_id = " + photo_id
-            rs = db_functions.execute_query(self, query, db_conn)
-            rs.next()
-            
-            self.save_photo(rs.getBytes('blob'), baseReportDir, name)
-            self.add_photo_modal(html_ypa_photos, name, photo_id, username)
-            self.add_to_photos(html_ypa_photos, username, photo_id, name, [name, last_updated, size, uri])
+            try:
+                query = "select thumbnail, blob from photo where photo_id = " + photo_id
+                rs = db_functions.execute_query(self, query, db_conn)
+                rs.next()
+                
+                self.save_photo(rs.getBytes('blob'), baseReportDir, name)
+                self.add_photo_modal(html_ypa_photos, name, photo_id, username)
+                self.add_to_photos(html_ypa_photos, username, photo_id, name, [name, last_updated, size, uri])
+            except NullPointerException as e:
+                self.log(Level.INFO, "WARNING: Failed to get image for " + name + " due to " + str(e))
+            finally:
+                last_obj_id = artifact_obj_id
 
-            last_obj_id = artifact_obj_id
-
-        progressBar.updateStatusLabel("Saving report")
+        progressBar.updateStatusLabel("Saving report files")
 
         with open(html_file_name, "w") as outf:
             outf.write(str(html_ypa))

@@ -50,6 +50,10 @@ from org.sleuthkit.autopsy.datamodel import ContentUtils
 from org.sleuthkit.autopsy.coreutils.MessageNotifyUtil import Message
 from org.sleuthkit.autopsy.ingest import GenericIngestModuleJobSettings
 
+from org.sleuthkit.datamodel import CommunicationsManager
+from org.sleuthkit.datamodel import Relationship
+from org.sleuthkit.datamodel import Account
+
 from db import db_functions
 
 # Factory that defines the name and details of the module and allows Autopsy
@@ -70,7 +74,7 @@ class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
         return "Parses and analyzes information regarding Windows 10's 'Your Phone' App"
 
     def getModuleVersionNumber(self):
-        return "0.2"
+        return "0.3"
 
     def getDefaultIngestJobSettings(self):
         # return YourPhoneWithUISettings()
@@ -118,11 +122,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         except:
             self.log(Level.INFO, "ERROR: " + dir + " directory already exists")
 
+    def get_or_create_account(self, manager, file, phone_number):
+        return manager.createAccountFileInstance(Account.Type.PHONE, phone_number, YourPhoneIngestModuleFactory.moduleName, file.getDataSource())
+
     def index_artifact(self, blackboard, artifact, artifact_type):
         try:
             # Index the artifact for keyword search
             blackboard.indexArtifact(artifact)
-        except Blackboard.BlackboardException:
+        except Blackboard.BlackboardException as e:
             self.log(Level.INFO, "Error indexing artifact " +
                      artifact.getDisplayName() + "" +str(e))
         # Fire an event to notify the UI and others that there is a new log artifact
@@ -226,7 +233,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
         # DB queries
         self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, (a.last_contacted_time / 10000000 - 11644473600) as last_contacted_time,  (c.last_updated_time/ 10000000 - 11644473600) as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
-        self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, CASE WHEN ifnull(m.from_address,'self') = '' THEN 'self' ELSE ifnull(m.from_address,'self') END as from_address,(m.timestamp / 10000000 - 11644473600) as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
+        self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, CASE WHEN ifnull(m.from_address,'Self') = '' THEN 'Self' ELSE ifnull(m.from_address,'Self') END as from_address,(m.timestamp / 10000000 - 11644473600) as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
         self.mms_query = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address from mms_part mp left join mms mm on mp.message_id = mm.message_id left join mms_address ma on mp.message_id = ma.message_id left join address a on ma.address = a.address left join contact c on a.contact_id = c.contact_id where ma.address not like 'insert-address-token' "
         self.address_types = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}
         self.photos_query = "select photo_id, name, (last_updated_time/ 10000000 - 11644473600) as last_updated_time, size, uri, thumbnail, blob from photo" 
@@ -274,11 +281,11 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, str(e))
                     continue
 
-                self.processContacts(db_functions.execute_query(self, self.contact_query, dbConn),file,blackboard,skCase)
+                self.processContacts(db_functions.execute_query(self, self.contact_query, dbConn), file, blackboard, skCase)
 
-                self.processMessages(db_functions.execute_query(self, self.messages_query, dbConn),file,blackboard,skCase)
+                self.processMessages(db_functions.execute_query(self, self.messages_query, dbConn), file, blackboard, skCase, username)
                 
-                self.processMms(db_functions.execute_query(self, self.mms_query, dbConn),file,blackboard,skCase)
+                self.processMms(db_functions.execute_query(self, self.mms_query, dbConn), file, blackboard, skCase)
                 
                 self.anyValidFileFound = True
 
@@ -421,42 +428,84 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.log(Level.SEVERE, str(e))
             return
 
-    def processMessages(self, messages, file, blackboard, skCase):
+    def processMessages(self, messages, file, blackboard, skCase, username):
         if not messages:
             return
-        try:
-            while messages.next():
+        commManager = skCase.getCommunicationsManager()
+        self_contact = self.get_or_create_account(commManager, file, username)
+        while messages.next():
+            try:
+                timestamp = messages.getLong('timestamp')
+                recipients = messages.getString('recipient_list')
+                from_address = messages.getString('from_address')
+                body = messages.getString('body')
+                # Create YPA message
                 art = file.newArtifact(self.art_messages.getTypeID())
                 art.addAttribute(BlackboardAttribute(self.att_thread_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('thread_id')))
                 art.addAttribute(BlackboardAttribute(self.att_message_id, YourPhoneIngestModuleFactory.moduleName, messages.getString('message_id')))
-                art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, messages.getString('recipient_list')))
-                art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, messages.getString('from_address')))
+                art.addAttribute(BlackboardAttribute(self.att_recipient_list, YourPhoneIngestModuleFactory.moduleName, recipients))
+                art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, from_address))
                 art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, messages.getString('display_name')))
-                art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, messages.getString('body')))
+                art.addAttribute(BlackboardAttribute(self.att_body, YourPhoneIngestModuleFactory.moduleName, body))
                 art.addAttribute(BlackboardAttribute(self.att_status, YourPhoneIngestModuleFactory.moduleName, "Read" if messages.getString('status') == '2' else 'Unread' ))
-                art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, messages.getLong('timestamp')))
-                self.index_artifact(blackboard, art,self.art_messages)
-        except Exception as e:
-            self.log(Level.SEVERE, str(e))
-            return
+                art.addAttribute(BlackboardAttribute(self.att_timestamp, YourPhoneIngestModuleFactory.moduleName, timestamp))
+                self.index_artifact(blackboard, art, self.art_messages)
+
+                # Create TSK message, for comms relationships
+                art = file.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_MESSAGE)
+
+                #if (type.equals("1")) {
+                #    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DIRECTION, YourPhoneIngestModuleFactory.moduleName, NbBundle.getMessage(this.getClass(), "TextMessageAnalyzer.bbAttribute.incoming")))
+                #} else {
+                #    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DIRECTION, YourPhoneIngestModuleFactory.moduleName, NbBundle.getMessage(this.getClass(), "TextMessageAnalyzer.bbAttribute.outgoing")))
+                #}
+
+                other_contact = self.get_or_create_account(commManager, file, recipients)
+
+                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_FROM, YourPhoneIngestModuleFactory.moduleName, from_address))
+                if from_address == "Self":
+                    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_TO, \
+                        YourPhoneIngestModuleFactory.moduleName, recipients))
+                    commManager.addRelationships(self_contact, [other_contact], art, Relationship.Type.MESSAGE, timestamp)
+                    self.log(Level.INFO, "INFO HERE: FROM (SELF!) " + from_address + " TO " + recipients)
+                else:
+                    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_TO, \
+                        YourPhoneIngestModuleFactory.moduleName, "Self (" + username + ")"))
+                    commManager.addRelationships(other_contact, [self_contact], art, Relationship.Type.MESSAGE, timestamp)
+                    self.log(Level.INFO, "INFO HERE: FROM " + from_address + " TO SELF" )
+                # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DIRECTION, YourPhoneIngestModuleFactory.moduleName, type))
+                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, YourPhoneIngestModuleFactory.moduleName, timestamp))
+                # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SUBJECT, YourPhoneIngestModuleFactory.moduleName, subject))
+                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TEXT, YourPhoneIngestModuleFactory.moduleName, body))
+                # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_MESSAGE_TYPE, YourPhoneIngestModuleFactory.moduleName, NbBundle.getMessage(this.getClass(), "TextMessageAnalyzer.bbAttribute.smsMessage")))           
+                self.index_artifact(blackboard, art, BlackboardArtifact.ARTIFACT_TYPE.TSK_MESSAGE)
+
+            except Exception as e:
+                self.log(Level.SEVERE, str(e))
                 
     def processContacts(self, contacts, file, blackboard, skCase):
         if not contacts:
             return
-        try:
-            while contacts.next():
+        commManager = skCase.getCommunicationsManager()
+        while contacts.next():
+            try:
                 art = file.newArtifact(self.art_contacts.getTypeID())
+                address = contacts.getString('address')
                 art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, contacts.getString('contact_id')))
-                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, contacts.getString('address')))
+                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, address))
                 art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, contacts.getString('display_name')))
                 art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, self.address_types[contacts.getString('address_type')]))
                 art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, contacts.getString('times_contacted')))
                 art.addAttribute(BlackboardAttribute(self.att_last_contacted_time, YourPhoneIngestModuleFactory.moduleName, contacts.getLong('last_contacted_time')))
                 art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, contacts.getLong('last_updated_time')))
+            
+                # Add contact SK account
+                self.get_or_create_account(commManager, file, address)
+                # self.log(Level.INFO, "[" + guid + "] with address " + address)
+
                 self.index_artifact(blackboard, art,self.art_contacts)
-        except Exception as e:
-            self.log(Level.SEVERE, str(e))
-            return
+            except Exception as e:
+                self.log(Level.SEVERE, str(e))
 
     def process_photos(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
@@ -465,8 +514,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         if not photos:
             return
         
-        try:
-            while photos.next():
+        while photos.next():
+            try:
                 art = db.newArtifact(self.art_photo.getTypeID())
                 art.addAttribute(BlackboardAttribute(self.att_photo_id, YourPhoneIngestModuleFactory.moduleName, photos.getString('photo_id')))
                 art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, photos.getString('name')))
@@ -478,8 +527,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 # blob_bytes = photos.getBytes('blob')
                 # art.addAttribute(BlackboardAttribute(self.att_photo, YourPhoneIngestModuleFactory.moduleName, blob_bytes))
                 self.index_artifact(blackboard, art, self.art_photo)
-        except Exception as e:
-            self.log(Level.SEVERE, str(e))
+            except Exception as e:
+                self.log(Level.SEVERE, str(e))
 
         db_functions.close_db_conn(self, db_conn, db_path)
 
@@ -488,32 +537,32 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
         apps = db_functions.execute_query(self, self.apps_query, db_conn)
         if apps:
-            try:
-                while apps.next():
+            while apps.next():
+                try:
                     art = db.newArtifact(self.art_phone_app.getTypeID())
                     art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, apps.getString('app_name')))
                     art.addAttribute(BlackboardAttribute(self.att_package_name, YourPhoneIngestModuleFactory.moduleName, apps.getString('package_name')))
                     art.addAttribute(BlackboardAttribute(self.att_version, YourPhoneIngestModuleFactory.moduleName, apps.getString('version')))
                     art.addAttribute(BlackboardAttribute(self.att_app_etag, YourPhoneIngestModuleFactory.moduleName, apps.getString('etag')))
                     self.index_artifact(blackboard, art, self.art_phone_app)
-            except Exception as e:
-                self.log(Level.SEVERE, str(e))
+                except Exception as e:
+                    self.log(Level.SEVERE, str(e))
 
         apps.close()
 
         settings = db_functions.execute_query(self, self.settings_query, db_conn)
 
         if settings:
-            try:
-                while settings.next():
+            while settings.next():
+                try:
                     art = db.newArtifact(self.art_phone_setting.getTypeID())
                     art.addAttribute(BlackboardAttribute(self.att_setting_group_id, YourPhoneIngestModuleFactory.moduleName, settings.getString('setting_group_id')))
                     art.addAttribute(BlackboardAttribute(self.att_setting_key, YourPhoneIngestModuleFactory.moduleName, settings.getString('setting_key')))
                     art.addAttribute(BlackboardAttribute(self.att_setting_type, YourPhoneIngestModuleFactory.moduleName, settings.getString('setting_type')))
                     art.addAttribute(BlackboardAttribute(self.att_setting_value, YourPhoneIngestModuleFactory.moduleName, settings.getString('setting_value')))
                     self.index_artifact(blackboard, art, self.art_phone_setting)
-            except Exception as e:
-                self.log(Level.SEVERE, str(e))
+                except Exception as e:
+                    self.log(Level.SEVERE, str(e))
 
         db_functions.close_db_conn(self, db_conn, db_path)
 
@@ -525,8 +574,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         if not notifications:
             return
         
-        try:
-            while notifications.next():
+        while notifications.next():
+            try:
                 art = db.newArtifact(self.art_phone_notification.getTypeID())
                 notific = Notification(notifications.getString('json'))
                 art.addAttribute(BlackboardAttribute(self.att_notification_id, YourPhoneIngestModuleFactory.moduleName, notifications.getString('notification_id')))
@@ -539,8 +588,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 art.addAttribute(BlackboardAttribute(self.att_state, YourPhoneIngestModuleFactory.moduleName, notifications.getString('state')))
                 art.addAttribute(BlackboardAttribute(self.att_anon_id, YourPhoneIngestModuleFactory.moduleName, notifications.getString('anonymous_id')))
                 self.index_artifact(blackboard, art, self.art_phone_notification)
-        except Exception as e:
-            self.log(Level.SEVERE, str(e))
+            except Exception as e:
+                self.log(Level.SEVERE, str(e))
         
         db_functions.close_db_conn(self, db_conn, db_path)
 

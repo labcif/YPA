@@ -2,6 +2,7 @@
 
 *   [Installation](#windows-installation)
 *   [Authors + Contacts](#authors)
+*   [Test data](#test-data)
 *   [Licenses](#licenses)
 
 Autopsy plugin made to extract information from the 'Your Phone' Windows 10 App
@@ -33,6 +34,10 @@ João Silva - jvictor.reiss@gmail.com
 Patrício Domingues - patricio.domingues@ipleiria.pt
 
 Miguel Frade - miguel.frade@ipleiria.pt
+
+# Test data
+
+If you wish to test the module before a real case, you have some dummy databases here: https://www.dropbox.com/s/t2p4q3pxe8jyaot/YourPhone_test_DB_datasource.zip?dl=0
 
 # Licenses
 

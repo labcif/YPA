@@ -1,6 +1,7 @@
 # YourPhoneAnalyzer
 
 *   [Installation](#windows-installation)
+*   [Cite](#cite)
 *   [Authors + Contacts](#authors)
 *   [Test data](#test-data)
 *   [Licenses](#licenses)
@@ -18,6 +19,13 @@ Autopsy plugin made to extract information from the 'Your Phone' Windows 10 App
 5.  Open your case and run the YPA file ingest module
 6.  Run the YPA Report Module with the desired options
 7.  Open the report (HTML)
+
+# Cite
+
+If you need to cite this work, please use the following reference:
+
+Domingues, Patricio, Miguel Frade, Luis Miguel Andrade, and João Victor Silva. "Digital forensic artifacts of the Your Phone application in Windows 10." *Digital Investigation* (2019).
+https://www.sciencedirect.com/science/article/pii/S1742287619301239
 
 # Authors
 

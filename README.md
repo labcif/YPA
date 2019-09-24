@@ -35,7 +35,7 @@ If you have any suggestion or find any bug, please contact us or create an issue
 
 **Contacts:**  
 
-Luís Andrade - luis.andrade@ipleiria.pt
+Luís Andrade - luis.m.andrade@outlook.com
 
 João Silva - jvictor.reiss@gmail.com  
 

@@ -7,11 +7,12 @@ from java.util.logging import Level
 from org.sqlite import SQLiteConfig, SQLiteOpenMode
 from org.sqlite.SQLiteConfig import JournalMode
 
-def execute_query(self,  query, db_conn):
+def execute_query(self, query, db_conn, db_name = "UNKNOWN"):
+    db_name = "[" + db_name + "] "
     try:
         return db_conn.createStatement().executeQuery(query)
     except SQLException as e:
-        self.log(Level.SEVERE, "Failed to execute query: " + query + ", due to " + str(e))
+        self.log(Level.SEVERE, db_name + "Failed to execute query: " + query + ", due to " + str(e))
     return
 
 def create_db_conn(self, file, temp_dir = None):
@@ -23,7 +24,7 @@ def create_db_conn(self, file, temp_dir = None):
         Class.forName("org.sqlite.JDBC").newInstance()
         config = SQLiteConfig()
         config.setEncoding(SQLiteConfig.Encoding.UTF8)
-        config.setJournalMode(JournalMode.WAL)
+        # config.setJournalMode(JournalMode.WAL)
         # config.setReadOnly(True)
         return DriverManager.getConnection(
             "jdbc:sqlite:%s" % dbPath, config.toProperties()), dbPath
@@ -32,9 +33,9 @@ def create_db_conn(self, file, temp_dir = None):
                     dbPath + " (" + str(e) + ")")
     return None, dbPath
 
-def close_db_conn(self,  db_conn, db_path):
+def close_db_conn(self, db_conn, db_path):
     db_conn.close()
     try:
         os.remove(db_path)
-    except (Exception, OSError) as e:
-        self.log(Level.SEVERE, "Error deleting temporary DB: " + str(e))
+    except (Exception, OSError):
+        self.log(Level.SEVERE, "Error deleting temporary DB: " + db_path)

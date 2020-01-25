@@ -65,13 +65,13 @@ class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
     def __init__(self):
         self.settings = None
 
-    moduleName = "Windows 'Your Phone' Analyzer"
+    moduleName = "Windows Your Phone Analyzer"
 
     def getModuleDisplayName(self):
         return self.moduleName
 
     def getModuleDescription(self):
-        return "Parses and analyzes information regarding Windows 10's 'Your Phone' App"
+        return "Parses and analyzes information regarding Windows 10's Your Phone App"
 
     def getModuleVersionNumber(self):
         return "0.3"
@@ -281,37 +281,58 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, str(e))
                     continue
 
-                self.processContacts(db_functions.execute_query(self, self.contact_query, dbConn), file, blackboard, skCase)
+                self.processContacts(db_functions.execute_query(self, self.contact_query, dbConn, file.getName()), file, blackboard, skCase)
 
-                self.processMessages(db_functions.execute_query(self, self.messages_query, dbConn), file, blackboard, skCase, username)
+                self.processMessages(db_functions.execute_query(self, self.messages_query, dbConn, file.getName()), file, blackboard, skCase, username)
                 
-                self.processMms(db_functions.execute_query(self, self.mms_query, dbConn), file, blackboard, skCase)
+                self.processMms(db_functions.execute_query(self, self.mms_query, dbConn, file.getName()), file, blackboard, skCase)
                 
                 self.anyValidFileFound = True
 
-                prag_uv = db_functions.execute_query(self, "pragma user_version", dbConn)
+                prag_uv = db_functions.execute_query(self, "pragma user_version", dbConn, file.getName())
 
                 art = file.newArtifact(self.art_settings.getTypeID())
                 prag_uv.next()
                 art.addAttribute(BlackboardAttribute(self.att_db_uv, YourPhoneIngestModuleFactory.moduleName, prag_uv.getString("user_version")))
                 self.index_artifact(blackboard, art,self.art_settings)
 
-                # Other YP databases (photos.db, notifications.db, settings.db)
+                # Other YP databases
                 dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
                 # dbs = [item for item in dbs if "phone.db" not in item.getName()]
-                for db in dbs:
-                    db_name = db.getName()
-                    if "phone.db" in db_name:
-                        continue
-                    if "notifications.db" in db_name:
-                        self.process_notifications(db, blackboard, skCase)
-                        continue
-                    if "settings.db" in db_name:
-                        self.process_settings(db, blackboard, skCase)
-                        continue
-                    if "photos.db" in db_name:
-                        self.process_photos(db, blackboard, skCase)
-                        continue
+                if any("deviceData.db" or "contacts.db" in db.getName()  for db in dbs):
+                    # We are in a new DB schema!
+                    # The only working DBs will be notifications.
+                    for db in dbs:
+                        db_name = db.getName()
+                        if "phone.db" in db_name:
+                            continue
+                        if "notifications.db" in db_name:
+                            self.process_notifications(db, blackboard, skCase)
+                            continue
+                        if "settings.db" in db_name:
+                            self.process_settings(db, blackboard, skCase)
+                            continue
+                        if "photos.db" in db_name:
+                            self.process_photos(db, blackboard, skCase)
+                            continue
+                        if "deviceData.db" in db_name:
+                            continue
+                        if "contacts" in db_name:
+                            continue
+                else:
+                    for db in dbs:
+                        db_name = db.getName()
+                        if "phone.db" in db_name:
+                            continue
+                        if "notifications.db" in db_name:
+                            self.process_notifications(db, blackboard, skCase)
+                            continue
+                        if "settings.db" in db_name:
+                            self.process_settings(db, blackboard, skCase)
+                            continue
+                        if "photos.db" in db_name:
+                            self.process_photos(db, blackboard, skCase)
+                            continue
                 
                 # self.log(Level.INFO, "Number of dbs: " + str(len(dbs)))
                 # Undark and mdg
@@ -510,7 +531,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_photos(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        photos = db_functions.execute_query(self, self.photos_query, db_conn)
+        photos = db_functions.execute_query(self, self.photos_query, db_conn, db.getName())
         if not photos:
             return
         
@@ -535,7 +556,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_settings(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        apps = db_functions.execute_query(self, self.apps_query, db_conn)
+        apps = db_functions.execute_query(self, self.apps_query, db_conn, db.getName())
         if apps:
             while apps.next():
                 try:
@@ -550,7 +571,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
         apps.close()
 
-        settings = db_functions.execute_query(self, self.settings_query, db_conn)
+        settings = db_functions.execute_query(self, self.settings_query, db_conn, db.getName())
 
         if settings:
             while settings.next():
@@ -569,7 +590,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_notifications(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        notifications = db_functions.execute_query(self, self.notifications_query, db_conn)
+        notifications = db_functions.execute_query(self, self.notifications_query, db_conn, db.getName())
         
         if not notifications:
             return

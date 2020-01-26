@@ -8,7 +8,6 @@ import sys
 import csv
 import mdgMod
 import json
-import constants
 
 from javax.swing import JList
 from javax.swing import JTextArea
@@ -317,8 +316,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 if has_contacts_db:
                     # We are in a new DB schema!
                     self.log(Level.INFO, "Starting phone.db processing")
-                    contact_db_path = (file.getLocalPath().rsplit('/')[0] + "\\contacts.db")
-                    query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB").replace('\\', '\\\\')
+                    contact_db_path = (file.getLocalPath().rsplit('\\', 1)[0] + "\\contacts.db")
+                    query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB")
                     dbConn = db_functions.execute_statement(self, query, dbConn, file.getName())
                     self.log(Level.INFO, "Success: " + query)
                     self.processContacts(db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)

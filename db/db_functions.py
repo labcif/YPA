@@ -15,6 +15,14 @@ def execute_query(self, query, db_conn, db_name = "UNKNOWN"):
         self.log(Level.SEVERE, db_name + "Failed to execute query: " + query + ", due to " + str(e))
     return
 
+def execute_statement(self, query, db_conn, db_name = "UNKNOWN"):
+    db_name = "[" + db_name + "] "
+    try:
+        db_conn.prepareStatement(query).execute()
+    except SQLException as e:
+        self.log(Level.SEVERE, db_name + "Failed to execute statement: " + query + ", due to " + str(e))
+    return db_conn
+
 def create_db_conn(self, file, temp_dir = None):
     if not temp_dir:
         temp_dir = self.temp_dir

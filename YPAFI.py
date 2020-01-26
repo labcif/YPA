@@ -8,6 +8,7 @@ import sys
 import csv
 import mdgMod
 import json
+import constants
 
 from javax.swing import JList
 from javax.swing import JTextArea
@@ -56,10 +57,40 @@ from org.sleuthkit.datamodel import Account
 
 from db import db_functions
 
+# DB queries
+CONTACT_QUERY = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, (a.last_contacted_time / 10000000 - 11644473600) as last_contacted_time,  (c.last_updated_time/ 10000000 - 11644473600) as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
+MESSAGES_QUERY = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, CASE WHEN ifnull(m.from_address,'Self') = '' THEN 'Self' ELSE ifnull(m.from_address,'Self') END as from_address,(m.timestamp / 10000000 - 11644473600) as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
+MMS_QUERY = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address from mms_part mp left join mms mm on mp.message_id = mm.message_id left join mms_address ma on mp.message_id = ma.message_id left join address a on ma.address = a.address left join contact c on a.contact_id = c.contact_id where ma.address not like 'insert-address-token' "
+ADDRESS_TYPE = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}
+PHOTOS_QUERY = "select photo_id, name, (last_updated_time/ 10000000 - 11644473600) as last_updated_time, size, uri, thumbnail, blob from photo" 
+APPS_QUERY = "select app_name, package_name, version, etag from phone_apps"
+SETTINGS_QUERY = "select setting_group_id, setting_key, setting_type, setting_value from settings"
+NOTIFICATIONS_QUERY = "select notification_id, json, (post_time/ 10000000 - 11644473600) as post_time, state, anonymous_id from notifications"
+CONTACT_QUERY_ATTACHED = "SELECT a.contact_id, c.phone_number, a.display_name, c.phone_number_type, \
+    (a.last_updated_time/ 10000000 - 11644473600) AS last_updated_time, \
+    cd.display_date as last_contacted_time \
+FROM contactsDB.contact a \
+JOIN contactsDB.phonenumber c ON a.contact_id = c.contact_id \
+LEFT JOIN contactsDB.contactdate cd ON a.contact_id = cd.contact_id"
+MESSAGES_QUERY_ATTACHED = "SELECT m.thread_id, m.message_id, con.recipient_list, \
+    ifnull(c.display_name,'n/a') as display_name, m.body, m.status, \
+    CASE WHEN ifnull(m.from_address,'Self') = '' THEN 'Self' ELSE ifnull(m.from_address,'Self') END AS from_address, \
+    (m.timestamp / 10000000 - 11644473600) AS timestamp \
+FROM message m \
+LEFT JOIN contactsDB.phonenumber a on m.from_address = a.phone_number \
+LEFT JOIN contactsDB.contact c ON a.contact_id = c.contact_id \
+JOIN conversation con on con.thread_id = m.thread_id \
+ORDER BY m.message_id;"
+MMS_QUERY_ATTACHED = "SELECT mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address \
+FROM mms_part mp \
+LEFT JOIN mms mm on mp.message_id = mm.message_id \
+LEFT JOIN mms_address ma on mp.message_id = ma.message_id \
+LEFT JOIN contactsDB.phonenumber a on ma.address = a.phone_number \
+LEFT JOIN contact c on a.contact_id = c.contact_id \
+WHERE ma.address NOT LIKE 'insert-address-token';"
+
 # Factory that defines the name and details of the module and allows Autopsy
 # to create instances of the modules that will do the analysis.
-
-
 class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
 
     def __init__(self):
@@ -101,8 +132,6 @@ class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
         return YourPhoneIngestModule(self.settings)
 
 # Data Source-level ingest module.  One gets created per data source.
-
-
 class YourPhoneIngestModule(DataSourceIngestModule):
 
     _logger = Logger.getLogger(YourPhoneIngestModuleFactory.moduleName)
@@ -231,16 +260,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_full_json = self.create_attribute_type('YPA_FULL_JSON', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Full JSON", skCase)
         self.att_text = self.create_attribute_type('YPA_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", skCase)
 
-        # DB queries
-        self.contact_query = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, (a.last_contacted_time / 10000000 - 11644473600) as last_contacted_time,  (c.last_updated_time/ 10000000 - 11644473600) as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
-        self.messages_query = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, CASE WHEN ifnull(m.from_address,'Self') = '' THEN 'Self' ELSE ifnull(m.from_address,'Self') END as from_address,(m.timestamp / 10000000 - 11644473600) as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
-        self.mms_query = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address from mms_part mp left join mms mm on mp.message_id = mm.message_id left join mms_address ma on mp.message_id = ma.message_id left join address a on ma.address = a.address left join contact c on a.contact_id = c.contact_id where ma.address not like 'insert-address-token' "
-        self.address_types = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}
-        self.photos_query = "select photo_id, name, (last_updated_time/ 10000000 - 11644473600) as last_updated_time, size, uri, thumbnail, blob from photo" 
-        self.apps_query = "select app_name, package_name, version, etag from phone_apps"
-        self.settings_query = "select setting_group_id, setting_key, setting_type, setting_value from settings"
-        self.notifications_query = "select notification_id, json, (post_time/ 10000000 - 11644473600) as post_time, state, anonymous_id from notifications"
-
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
     # See: http://www.sleuthkit.org/sleuthkit/docs/jni-docs/interfaceorg_1_1sleuthkit_1_1datamodel_1_1_content.html
@@ -255,7 +274,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.log(Level.INFO, "Found " + str(len(files)) + " files (phone.db)")
         self.anyValidFileFound = False
         for file in files:
-            full_path = (file.getParentPath() + file.getName()) 
+            full_path = (file.getParentPath() + file.getName())
             dbConn, dbPath = db_functions.create_db_conn(self, file)
             try:
                 split = full_path.split('/')                  
@@ -281,27 +300,31 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, str(e))
                     continue
 
-                self.processContacts(db_functions.execute_query(self, self.contact_query, dbConn, file.getName()), file, blackboard, skCase)
+                user_version = self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", dbConn, file.getName()), file, blackboard, skCase)
 
-                self.processMessages(db_functions.execute_query(self, self.messages_query, dbConn, file.getName()), file, blackboard, skCase, username)
-                
-                self.processMms(db_functions.execute_query(self, self.mms_query, dbConn, file.getName()), file, blackboard, skCase)
-                
                 self.anyValidFileFound = True
-
-                prag_uv = db_functions.execute_query(self, "pragma user_version", dbConn, file.getName())
-
-                art = file.newArtifact(self.art_settings.getTypeID())
-                prag_uv.next()
-                art.addAttribute(BlackboardAttribute(self.att_db_uv, YourPhoneIngestModuleFactory.moduleName, prag_uv.getString("user_version")))
-                self.index_artifact(blackboard, art,self.art_settings)
 
                 # Other YP databases
                 dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
                 # dbs = [item for item in dbs if "phone.db" not in item.getName()]
-                if any("deviceData.db" or "contacts.db" in db.getName()  for db in dbs):
+                # Jython does not support Stream predicates... :'( Ugly code follows
+                has_contacts_db = False
+                for db in dbs:
+                    if "contacts.db" in db.getName():
+                        has_contacts_db = True
+                        break
+                
+                if has_contacts_db:
                     # We are in a new DB schema!
-                    # The only working DBs will be notifications.
+                    self.log(Level.INFO, "Starting phone.db processing")
+                    contact_db_path = (file.getLocalPath().rsplit('/')[0] + "\\contacts.db")
+                    query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB").replace('\\', '\\\\')
+                    dbConn = db_functions.execute_statement(self, query, dbConn, file.getName())
+                    self.log(Level.INFO, "Success: " + query)
+                    self.processContacts(db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
+                    self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase, username)
+                    self.processMms(db_functions.execute_query(self, MMS_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
+
                     for db in dbs:
                         db_name = db.getName()
                         if "phone.db" in db_name:
@@ -315,11 +338,11 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         if "photos.db" in db_name:
                             self.process_photos(db, blackboard, skCase)
                             continue
-                        if "deviceData.db" in db_name:
-                            continue
-                        if "contacts" in db_name:
-                            continue
                 else:
+                    self.processContacts(db_functions.execute_query(self, CONTACT_QUERY, dbConn, file.getName()), file, blackboard, skCase)
+                    self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY, dbConn, file.getName()), file, blackboard, skCase, username)
+                    self.processMms(db_functions.execute_query(self, MMS_QUERY, dbConn, file.getName()), file, blackboard, skCase)
+                    
                     for db in dbs:
                         db_name = db.getName()
                         if "phone.db" in db_name:
@@ -397,6 +420,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             
         return IngestModule.ProcessResult.OK   
 
+    def process_db_user_version(self, prag_uv, file, blackboard, skCase):
+        art = file.newArtifact(self.art_settings.getTypeID())
+        prag_uv.next()
+        user_version = prag_uv.getString("user_version")
+        art.addAttribute(BlackboardAttribute(self.att_db_uv, YourPhoneIngestModuleFactory.moduleName, user_version))
+        self.index_artifact(blackboard, art, self.art_settings)
+        return user_version
+
     def processMms(self, mms, file, blackboard, skCase):
         if not mms:
             return
@@ -406,13 +437,16 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 mms_id = mms.getString('message_id')
                 if mms_id not in mms_obj:
                     mms_obj[mms_id] =[]             
-                    mms_obj[mms_id].append(mms.getString('message_id'))    # m~_id        
-                    mms_obj[mms_id].append(mms.getString('thread_id'))    # thread_id
-                    mms_obj[mms_id].append(mms.getString('display_name'))        # disp_name
-                    mms_obj[mms_id].append(mms.getString('address'))            # address
-                    mms_obj[mms_id].append('')            # text
-                    mms_obj[mms_id].append(0)         # n of multimedia
-                    mms_obj[mms_id].append([])            # names of the multimedia files
+                    mms_obj[mms_id].append(mms.getString('message_id'))      
+                    mms_obj[mms_id].append(mms.getString('thread_id'))
+                    mms_obj[mms_id].append(mms.getString('display_name'))
+                    mms_obj[mms_id].append(mms.getString('address'))
+                    # Text
+                    mms_obj[mms_id].append('')
+                    # N of multimedia
+                    mms_obj[mms_id].append(0)
+                    # Names of the multimedia files
+                    mms_obj[mms_id].append([])
                 if mms.getString('content_type') not in ['text/plain','application/smil']:
                 
                     mms_obj[mms_id][5] = mms_obj[mms_id][5] + 1
@@ -488,12 +522,12 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_TO, \
                         YourPhoneIngestModuleFactory.moduleName, recipients))
                     commManager.addRelationships(self_contact, [other_contact], art, Relationship.Type.MESSAGE, timestamp)
-                    self.log(Level.INFO, "INFO HERE: FROM (SELF!) " + from_address + " TO " + recipients)
+                    # self.log(Level.INFO, "INFO HERE: FROM (SELF!) " + from_address + " TO " + recipients)
                 else:
                     art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_TO, \
                         YourPhoneIngestModuleFactory.moduleName, "Self (" + username + ")"))
                     commManager.addRelationships(other_contact, [self_contact], art, Relationship.Type.MESSAGE, timestamp)
-                    self.log(Level.INFO, "INFO HERE: FROM " + from_address + " TO SELF" )
+                    # self.log(Level.INFO, "INFO HERE: FROM " + from_address + " TO SELF" )
                 # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DIRECTION, YourPhoneIngestModuleFactory.moduleName, type))
                 art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, YourPhoneIngestModuleFactory.moduleName, timestamp))
                 # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SUBJECT, YourPhoneIngestModuleFactory.moduleName, subject))
@@ -515,7 +549,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 art.addAttribute(BlackboardAttribute(self.att_contact_id, YourPhoneIngestModuleFactory.moduleName, contacts.getString('contact_id')))
                 art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, address))
                 art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, contacts.getString('display_name')))
-                art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, self.address_types[contacts.getString('address_type')]))
+                art.addAttribute(BlackboardAttribute(self.att_address_type, YourPhoneIngestModuleFactory.moduleName, ADDRESS_TYPE[contacts.getString('address_type')]))
                 art.addAttribute(BlackboardAttribute(self.att_times_contacted, YourPhoneIngestModuleFactory.moduleName, contacts.getString('times_contacted')))
                 art.addAttribute(BlackboardAttribute(self.att_last_contacted_time, YourPhoneIngestModuleFactory.moduleName, contacts.getLong('last_contacted_time')))
                 art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, contacts.getLong('last_updated_time')))
@@ -531,7 +565,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_photos(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        photos = db_functions.execute_query(self, self.photos_query, db_conn, db.getName())
+        user_version = self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db), db, blackboard, skCase)
+        photos = db_functions.execute_query(self, PHOTOS_QUERY, db_conn, db.getName())
         if not photos:
             return
         
@@ -556,7 +591,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_settings(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        apps = db_functions.execute_query(self, self.apps_query, db_conn, db.getName())
+        user_version = self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db), db, blackboard, skCase)
+        apps = db_functions.execute_query(self, APPS_QUERY, db_conn, db.getName())
         if apps:
             while apps.next():
                 try:
@@ -571,7 +607,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
         apps.close()
 
-        settings = db_functions.execute_query(self, self.settings_query, db_conn, db.getName())
+        settings = db_functions.execute_query(self, SETTINGS_QUERY, db_conn, db.getName())
 
         if settings:
             while settings.next():
@@ -590,7 +626,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_notifications(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        notifications = db_functions.execute_query(self, self.notifications_query, db_conn, db.getName())
+        user_version = self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db), db, blackboard, skCase)
+        notifications = db_functions.execute_query(self, NOTIFICATIONS_QUERY, db_conn, db.getName())
         
         if not notifications:
             return

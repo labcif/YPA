@@ -65,9 +65,9 @@ PHOTOS_QUERY = "select photo_id, name, (last_updated_time/ 10000000 - 1164447360
 APPS_QUERY = "select app_name, package_name, version, etag from phone_apps"
 SETTINGS_QUERY = "select setting_group_id, setting_key, setting_type, setting_value from settings"
 NOTIFICATIONS_QUERY = "select notification_id, json, (post_time/ 10000000 - 11644473600) as post_time, state, anonymous_id from notifications"
-CONTACT_QUERY_ATTACHED = "SELECT a.contact_id, c.phone_number, a.display_name, c.phone_number_type, \
+CONTACT_QUERY_ATTACHED = "SELECT a.contact_id, c.phone_number AS address , a.display_name, c.phone_number_type AS address_type, \
     (a.last_updated_time/ 10000000 - 11644473600) AS last_updated_time, \
-    cd.display_date as last_contacted_time \
+    cd.display_date AS last_contacted_time, 0 AS times_contacted \
 FROM contactsDB.contact a \
 JOIN contactsDB.phonenumber c ON a.contact_id = c.contact_id \
 LEFT JOIN contactsDB.contactdate cd ON a.contact_id = cd.contact_id"
@@ -299,7 +299,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.log(Level.INFO, str(e))
                     continue
 
-                user_version = self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", dbConn, file.getName()), file, blackboard, skCase)
+                self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", dbConn, file.getName()), file, blackboard, skCase)
 
                 self.anyValidFileFound = True
 
@@ -315,19 +315,15 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 
                 if has_contacts_db:
                     # We are in a new DB schema!
-                    self.log(Level.INFO, "Starting phone.db processing")
                     contact_db_path = (file.getLocalPath().rsplit('\\', 1)[0] + "\\contacts.db")
                     query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB")
                     dbConn = db_functions.execute_statement(self, query, dbConn, file.getName())
-                    self.log(Level.INFO, "Success: " + query)
                     self.processContacts(db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
                     self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase, username)
                     self.processMms(db_functions.execute_query(self, MMS_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
 
                     for db in dbs:
                         db_name = db.getName()
-                        if "phone.db" in db_name:
-                            continue
                         if "notifications.db" in db_name:
                             self.process_notifications(db, blackboard, skCase)
                             continue
@@ -344,8 +340,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     
                     for db in dbs:
                         db_name = db.getName()
-                        if "phone.db" in db_name:
-                            continue
                         if "notifications.db" in db_name:
                             self.process_notifications(db, blackboard, skCase)
                             continue
@@ -564,7 +558,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_photos(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        user_version = self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db), db, blackboard, skCase)
+        self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         photos = db_functions.execute_query(self, PHOTOS_QUERY, db_conn, db.getName())
         if not photos:
             return
@@ -590,7 +584,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_settings(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        user_version = self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db), db, blackboard, skCase)
+        self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         apps = db_functions.execute_query(self, APPS_QUERY, db_conn, db.getName())
         if apps:
             while apps.next():
@@ -625,7 +619,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def process_notifications(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
-        user_version = self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db), db, blackboard, skCase)
+        self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         notifications = db_functions.execute_query(self, NOTIFICATIONS_QUERY, db_conn, db.getName())
         
         if not notifications:

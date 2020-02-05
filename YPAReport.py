@@ -66,6 +66,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     
     def getRelativeFilePathPhotos(self):
         return "YPA_Photos_" + Case.getCurrentCase().getName() + ".html"
+        
+    def getRelativeFilePathCallHistory(self):
+        return "YPA_CallHistory_" + Case.getCurrentCase().getName() + ".html"
     
     def get_file_by_artifact(self, skCase, artifact):
         return skCase.getAbstractFileById(artifact.getObjectID())
@@ -297,6 +300,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         address_book = html_file.select("#address-book-table")[0]
         address_book.append(tr_address)
     
+    def add_to_call_history(self, html_file, call_id, list_att, username):
+        tr_call = self.create_tr_for_table(html_file, username, call_id, list_att)
+
+        call_history = html_file.select("#call-history-table")[0]
+        call_history.append(tr_call)
+    
     def add_to_photos(self, html_file, username, photo_id, path, list_att):
         tr_photo = self.create_tr_for_table(html_file, username, photo_id, list_att)
 
@@ -378,10 +387,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Get artifact lists
         # art_list_custom_regex = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'TSK_LFA_CUSTOM_REGEX_%'")
 
-        art_list_messages = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_MESSAGE_%'")
-        art_list_contacts = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_CONTACTS_%'")
-        art_list_photos = skCase.getMatchingArtifacts("JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE 'YPA_PHOTO_%'")
-        total_artifact_count = len(art_list_messages) + len(art_list_contacts) + len(art_list_photos)
+        base_query = "JOIN blackboard_artifact_types AS types ON blackboard_artifacts.artifact_type_id = types.artifact_type_id WHERE types.type_name LIKE "
+        art_list_messages = skCase.getMatchingArtifacts(base_query + "'YPA_MESSAGE_%'")
+        art_list_contacts = skCase.getMatchingArtifacts(base_query + "'YPA_CONTACTS_%'")
+        art_list_photos = skCase.getMatchingArtifacts(base_query + "'YPA_PHOTO_%'")
+        art_list_calls = skCase.getMatchingArtifacts(base_query + "'YPA_CALLING_%'")
+        total_artifact_count = len(art_list_messages) + len(art_list_contacts) + len(art_list_photos) + len(art_list_calls)
 
 
 
@@ -417,6 +428,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Get template path
         template_name_photos = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_photos.html")
 
+        # Get html_file_name
+        html_file_name_call_history = os.path.join(baseReportDir, self.getRelativeFilePathCallHistory())
+        # Get template path
+        template_name_call_history = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_call_history.html")
+
         with open(template_name_chats) as base_dir:
             txt = base_dir.read()
             html_ypa = bs4.BeautifulSoup(txt)
@@ -429,12 +445,22 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             txt = base_dir.read()
             html_ypa_photos = bs4.BeautifulSoup(txt)
 
+        with open(template_name_call_history) as base_dir:
+            txt = base_dir.read()
+            html_ypa_call_history = bs4.BeautifulSoup(txt)
+
         self.add_link_to_html_report(html_ypa, "#address-book", self.getRelativeFilePathAddressBook())
         self.add_link_to_html_report(html_ypa, "#photos", self.getRelativeFilePathPhotos())
+        self.add_link_to_html_report(html_ypa, "#call-history", self.getRelativeFilePathCallHistory())
         self.add_link_to_html_report(html_ypa_book, "#conversations", self.getRelativeFilePath())
         self.add_link_to_html_report(html_ypa_book, "#photos", self.getRelativeFilePathPhotos())
+        self.add_link_to_html_report(html_ypa_book, "#call-history", self.getRelativeFilePathCallHistory())
         self.add_link_to_html_report(html_ypa_photos, "#conversations", self.getRelativeFilePath())
         self.add_link_to_html_report(html_ypa_photos, "#address-book", self.getRelativeFilePathAddressBook())
+        self.add_link_to_html_report(html_ypa_photos, "#call-history", self.getRelativeFilePathCallHistory())
+        self.add_link_to_html_report(html_ypa_call_history, "#conversations", self.getRelativeFilePath())
+        self.add_link_to_html_report(html_ypa_call_history, "#address-book", self.getRelativeFilePathAddressBook())
+        self.add_link_to_html_report(html_ypa_call_history, "#photos", self.getRelativeFilePathPhotos())
         
         # Get Attribute types
         att_thread_id = skCase.getAttributeType("YPA_THREAD_ID")
@@ -454,6 +480,12 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         att_photo_id = skCase.getAttributeType("YPA_PHOTO_ID")
         att_pic_size = skCase.getAttributeType("YPA_PIC_SIZE")
         att_uri = skCase.getAttributeType("YPA_URI")
+
+        att_call_id = skCase.getAttributeType("YPA_CALL_ID")
+        att_duration = skCase.getAttributeType("YPA_CALL_DURATION")
+        att_call_type = skCase.getAttributeType("YPA_CALL_TYPE")
+        att_start_time = skCase.getAttributeType("YPA_START_TIME")
+        att_is_read = skCase.getAttributeType("YPA_IS_READ")
 
         art_count = 0
         attribute_type = self.configPanel.getAttTypeList()[self.configPanel.getSelectedAddressBookOrderIndex()]
@@ -501,6 +533,17 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         for (t_id, t_list) in dict_thread_ids.iteritems():
             self.add_total_msgs_to_chat(html_ypa, t_id, t_list[0], t_list[1])
+
+        for artifact in art_list_calls:
+            username = artifact.getArtifactTypeName().split('_')[-1]
+            call_id = artifact.getAttribute(att_call_id).getValueString()
+            last_updated = self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong())
+            call_start_time = self.unix_to_date_string(artifact.getAttribute(att_start_time).getValueLong())
+            att_list = [artifact.getAttribute(att_display_name).getValueString(), \
+                artifact.getAttribute(att_address).getValueString(), str(artifact.getAttribute(att_duration).getValueLong()), \
+                artifact.getAttribute(att_call_type).getValueString(), call_start_time, \
+                last_updated, artifact.getAttribute(att_is_read).getValueString()]
+            self.add_to_call_history(html_ypa_call_history, call_id, att_list, username)
 
         progressBar.updateStatusLabel("Generating photos from BLOBs")
 
@@ -557,6 +600,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         with open(html_file_name_photos, "w") as outf:
             outf.write(str(html_ypa_photos))
 
+        with open(html_file_name_call_history, "w") as outf:
+            outf.write(str(html_ypa_call_history))
+        
         Case.getCurrentCase().addReport(html_file_name, self.moduleName, "YPA Report")
 
         # Elapsed time

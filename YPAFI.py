@@ -686,12 +686,12 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         
         while call_history.next():
             try:
-                from_address = call_history.getString('phone_number')
+                address = call_history.getString('phone_number')
                 start_time = call_history.getLong('start_time')
                 art = db.newArtifact(self.art_call.getTypeID())
                 art.addAttribute(BlackboardAttribute(self.att_call_id, YourPhoneIngestModuleFactory.moduleName, call_history.getString('call_id')))
                 art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, call_history.getString('display_name')))
-                art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, from_address))
+                art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, address))
                 art.addAttribute(BlackboardAttribute(self.att_duration, YourPhoneIngestModuleFactory.moduleName, call_history.getLong('duration')))
                 # TODO: Determine what call type is
                 art.addAttribute(BlackboardAttribute(self.att_call_type, YourPhoneIngestModuleFactory.moduleName, call_history.getString('call_type')))
@@ -703,9 +703,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 
                 # Create TSK call, for comms relationships
                 art = db.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_CALLLOG)
-                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_FROM, YourPhoneIngestModuleFactory.moduleName, from_address))
+                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_FROM, YourPhoneIngestModuleFactory.moduleName, address))
                 art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME_START, YourPhoneIngestModuleFactory.moduleName, start_time))
-                other_contact = self.get_or_create_account(commManager, db, from_address)
+                other_contact = self.get_or_create_account(commManager, db, address)
                 commManager.addRelationships(self_contact, [other_contact], art, Relationship.Type.CALL_LOG, start_time)
                 self.index_artifact(blackboard, art, BlackboardArtifact.ARTIFACT_TYPE.TSK_CALLLOG)
 

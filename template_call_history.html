@@ -4,7 +4,7 @@
         <meta charset="utf-8">
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>YPA - Address book</title>
+        <title>YPA - Call history</title>
         <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
     </head>
     <body>
@@ -34,22 +34,18 @@
                     <tr>
                         <th scope="col">User</th>
                         <th scope="col">ID</th>
-                        <th scope="col">Address</th>
                         <th scope="col">Display name</th>
-                        <th scope="col">Address type</th>
-                        <th scope="col"># contacted <b>(*)</b></th>
-                        <th scope="col">Last contacted <b>(**)</b></th>
-                        <th scope="col">Last updated <b>(***)</b></th>
+                        <th scope="col">Address</th>
+                        <th scope="col">Duration</th>
+                        <th scope="col">Call type</th>
+                        <th scope="col">Start time</th>
+                        <th scope="col">Last updated</th>
+                        <th scope="col">Is read</th>
                     </tr>
                 </thead>
-                <tbody id="address-book-table">
+                <tbody id="call-history-table">
                 </tbody>
             </table>
-            <div>
-                <p><b>(*)</b> Might not be accurate (progresses by blocks of 10 for values larger than 10) and includes contact done via WhatsApp and other instant messaging apps. More recent versions do not have this attribute anymore (0).</p>
-                <p><b>(**)</b> Affected by WhatsApp and other instant messaging apps.</p>
-                <p><b>(***)</b> Affected by updates of the smartphone SMS application.</p>
-            </div>
         </div>            
 
         <!-- Bootstrap core JavaScript -->

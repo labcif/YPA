@@ -87,6 +87,20 @@ LEFT JOIN mms_address ma on mp.message_id = ma.message_id \
 LEFT JOIN contactsDB.phonenumber a on ma.address = a.phone_number \
 LEFT JOIN contact c on a.contact_id = c.contact_id \
 WHERE ma.address NOT LIKE 'insert-address-token';"
+CALLINGS_QUERY = "SELECT call_id, c.contact_id, c.display_name, ch.phone_number, duration, \
+    call_type, (start_time / 10000000 - 11644473600) AS start_time, is_read, \
+    (ch.last_updated_time / 10000000 - 11644473600) AS last_updated_time \
+FROM call_history ch \
+JOIN contactsDB.phonenumber pn ON ch.phone_number = pn.display_phone_number \
+JOIN contactsDB.contact c ON pn.contact_id = c.contact_id \
+UNION \
+SELECT call_id, ifnull(c.contact_id, 'Unknown'), ifnull(c.display_name, 'Unknown'), ch.phone_number, duration, call_type, \
+    (start_time / 10000000 - 11644473600) AS start_time, is_read, \
+    (ch.last_updated_time / 10000000 - 11644473600) AS last_updated_time \
+FROM call_history ch \
+LEFT JOIN contactsDB.phonenumber pn ON ch.phone_number = pn.display_phone_number \
+LEFT JOIN contactsDB.contact c ON pn.contact_id = c.contact_id \
+WHERE pn.display_phone_number IS NULL"
 
 # Factory that defines the name and details of the module and allows Autopsy
 # to create instances of the modules that will do the analysis.
@@ -259,6 +273,13 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_full_json = self.create_attribute_type('YPA_FULL_JSON', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Full JSON", skCase)
         self.att_text = self.create_attribute_type('YPA_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", skCase)
 
+        # Call history from calling.db
+        self.att_call_id = self.create_attribute_type('YPA_CALL_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Call ID", skCase)
+        self.att_duration = self.create_attribute_type('YPA_CALL_DURATION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Duration", skCase)
+        self.att_call_type = self.create_attribute_type('YPA_CALL_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Call type", skCase)
+        self.att_start_time = self.create_attribute_type('YPA_START_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Start time", skCase)
+        self.att_is_read = self.create_attribute_type('YPA_IS_READ', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Is read", skCase)
+
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
     # See: http://www.sleuthkit.org/sleuthkit/docs/jni-docs/interfaceorg_1_1sleuthkit_1_1datamodel_1_1_content.html
@@ -295,6 +316,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.art_phone_app = self.create_artifact_type("YPA_PHONE_APP_" + guid + "_" + username, "User " + username + " - Phone apps", skCase)
                     self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + guid + "_" + username, "User " + username + " - Phone settings", skCase)
                     self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + guid + "_" + username, "User " + username + " - Notifications", skCase)
+                    self.art_call = self.create_artifact_type("YPA_CALLING_" + guid + "_" + username, "User " + username + " - Call history", skCase)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
@@ -316,8 +338,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 if has_contacts_db:
                     # We are in a new DB schema!
                     contact_db_path = (file.getLocalPath().rsplit('\\', 1)[0] + "\\contacts.db")
-                    query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB")
-                    dbConn = db_functions.execute_statement(self, query, dbConn, file.getName())
+                    attach_query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB")
+                    dbConn = db_functions.execute_statement(self, attach_query, dbConn, file.getName())
                     self.processContacts(db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
                     self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase, username)
                     self.processMms(db_functions.execute_query(self, MMS_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
@@ -333,6 +355,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         if "photos.db" in db_name:
                             self.process_photos(db, blackboard, skCase)
                             continue
+                        if "calling.db":
+                            self.process_calling(db, blackboard, skCase, attach_query, username)
                 else:
                     self.processContacts(db_functions.execute_query(self, CONTACT_QUERY, dbConn, file.getName()), file, blackboard, skCase)
                     self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY, dbConn, file.getName()), file, blackboard, skCase, username)
@@ -643,6 +667,52 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 self.log(Level.SEVERE, str(e))
         
         db_functions.close_db_conn(self, db_conn, db_path)
+    
+    def process_calling(self, db, blackboard, skCase, attach_query, username):
+        db_conn, db_path = db_functions.create_db_conn(self, db)
+
+        self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
+        
+        # Attach contacts.db
+        db_functions.execute_statement(self, attach_query, db_conn, db.getName())
+
+        call_history = db_functions.execute_query(self, CALLINGS_QUERY, db_conn, db.getName())
+        
+        commManager = skCase.getCommunicationsManager()
+        self_contact = self.get_or_create_account(commManager, db, username)
+
+        if not call_history:
+            return
+        
+        while call_history.next():
+            try:
+                from_address = call_history.getString('phone_number')
+                start_time = call_history.getLong('start_time')
+                art = db.newArtifact(self.art_call.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_call_id, YourPhoneIngestModuleFactory.moduleName, call_history.getString('call_id')))
+                art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, call_history.getString('display_name')))
+                art.addAttribute(BlackboardAttribute(self.att_from_address, YourPhoneIngestModuleFactory.moduleName, from_address))
+                art.addAttribute(BlackboardAttribute(self.att_duration, YourPhoneIngestModuleFactory.moduleName, call_history.getLong('duration')))
+                # TODO: Determine what call type is
+                art.addAttribute(BlackboardAttribute(self.att_call_type, YourPhoneIngestModuleFactory.moduleName, call_history.getString('call_type')))
+                art.addAttribute(BlackboardAttribute(self.att_start_time, YourPhoneIngestModuleFactory.moduleName, start_time))
+                art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, call_history.getLong('last_updated_time')))
+                is_read = call_history.getInt("is_read")
+                art.addAttribute(BlackboardAttribute(self.att_is_read, YourPhoneIngestModuleFactory.moduleName, str(is_read == 1)))
+                self.index_artifact(blackboard, art, self.art_call)
+                
+                # Create TSK call, for comms relationships
+                art = db.newArtifact(BlackboardArtifact.ARTIFACT_TYPE.TSK_CALLLOG)
+                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_FROM, YourPhoneIngestModuleFactory.moduleName, from_address))
+                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME_START, YourPhoneIngestModuleFactory.moduleName, start_time))
+                other_contact = self.get_or_create_account(commManager, db, from_address)
+                commManager.addRelationships(self_contact, [other_contact], art, Relationship.Type.CALL_LOG, start_time)
+                self.index_artifact(blackboard, art, BlackboardArtifact.ARTIFACT_TYPE.TSK_CALLLOG)
+
+            except Exception as e:
+                self.log(Level.SEVERE, str(e))
+        
+        db_functions.close_db_conn(self, db_conn, db_path)
 
 class Notification(object):
     def __init__(self, j):
@@ -653,9 +723,7 @@ class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just i
     serialVersionUID = 1L
     
     def __init__(self):
-        self.flag = False
-        self.flag1 = False
-        self.flag2 = False
+        pass
 
     def getVersionNumber(self):
         return serialVersionUID

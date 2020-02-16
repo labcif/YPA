@@ -62,6 +62,11 @@ MESSAGES_QUERY = "select m.thread_id, m.message_id, con.recipient_list , ifnull(
 MMS_QUERY = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address from mms_part mp left join mms mm on mp.message_id = mm.message_id left join mms_address ma on mp.message_id = ma.message_id left join address a on ma.address = a.address left join contact c on a.contact_id = c.contact_id where ma.address not like 'insert-address-token' "
 ADDRESS_TYPE = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}
 PHOTOS_QUERY = "select photo_id, name, (last_updated_time/ 10000000 - 11644473600) as last_updated_time, size, uri, thumbnail, blob from photo" 
+PHOTOS_MEDIA_QUERY = "SELECT m.id, IFNULL(p.photo_id, 'N/A') as photo_id, m.name, (m.last_updated_time / 10000000 - 11644473600) as last_updated_time, \
+    (m.taken_time / 10000000 - 11644473600) as taken_time, m.size, m.uri, IFNULL(NULLIF(m.orientation, ''), 'N/A') as orientation, \
+    IFNULL(m.last_seen_time, 0) as last_seen_time, height, width \
+FROM media m \
+LEFT JOIN photo p ON m.name = p.name;"
 APPS_QUERY = "select app_name, package_name, version, etag from phone_apps"
 SETTINGS_QUERY = "select setting_group_id, setting_key, setting_type, setting_value from settings"
 NOTIFICATIONS_QUERY = "select notification_id, json, (post_time/ 10000000 - 11644473600) as post_time, state, anonymous_id from notifications"
@@ -251,8 +256,12 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         # photo.db photo attributes
         self.att_photo_id = self.create_attribute_type('YPA_PHOTO_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Photo ID", skCase)
         self.att_uri = self.create_attribute_type('YPA_URI', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "URI", skCase)
-        # self.att_photo_thumbnail = self.create_attribute_type('YPA_PHOTO_THUMBNAIL', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.BYTE, "Thumbnail", skCase)
-        # self.att_photo = self.create_attribute_type('YPA_PHOTO_FULL', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.BYTE, "Blob", skCase)
+        self.att_media_id = self.create_attribute_type('YPA_MEDIA_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Media ID", skCase)
+        self.att_taken_time = self.create_attribute_type('YPA_TAKEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Taken time", skCase)
+        self.att_orientation = self.create_attribute_type('YPA_ORIENTATION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Orientation", skCase)
+        self.att_last_seen_time = self.create_attribute_type('YPA_LAST_SEEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Last seen", skCase)
+        self.att_height = self.create_attribute_type('YPA_HEIGHT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Height", skCase)
+        self.att_width = self.create_attribute_type('YPA_WIDTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Width", skCase)
 
         # Apps from settings.db
         self.att_package_name = self.create_attribute_type('YPA_APP_PACKAGE_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Package name", skCase)
@@ -583,7 +592,15 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         db_conn, db_path = db_functions.create_db_conn(self, db)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
-        photos = db_functions.execute_query(self, PHOTOS_QUERY, db_conn, db.getName())
+        
+        # Try to make the new query - in case we fail, fallback to the old one
+        try:
+            photos = db_functions.execute_query(self, PHOTOS_MEDIA_QUERY, db_conn, db.getName())
+            new_query = True
+        except Exception as e:
+            photos = db_functions.execute_query(self, PHOTOS_QUERY, db_conn, db.getName())
+            new_query = False
+            self.log(Level.INFO, "Failed to use the new media query: " + str(e))
         if not photos:
             return
         
@@ -595,10 +612,15 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, photos.getLong('last_updated_time')))
                 art.addAttribute(BlackboardAttribute(self.att_pic_size, YourPhoneIngestModuleFactory.moduleName, photos.getLong('size')))
                 art.addAttribute(BlackboardAttribute(self.att_uri, YourPhoneIngestModuleFactory.moduleName, photos.getString('uri')))
-                # blob_bytes = photos.getBytes('thumbnail')
-                # art.addAttribute(BlackboardAttribute(self.att_photo_thumbnail, YourPhoneIngestModuleFactory.moduleName, blob_bytes))
-                # blob_bytes = photos.getBytes('blob')
-                # art.addAttribute(BlackboardAttribute(self.att_photo, YourPhoneIngestModuleFactory.moduleName, blob_bytes))
+                if new_query:
+                    # New query only adds more attributes
+                    art.addAttribute(BlackboardAttribute(self.att_media_id, YourPhoneIngestModuleFactory.moduleName, photos.getString('id')))
+                    art.addAttribute(BlackboardAttribute(self.att_taken_time, YourPhoneIngestModuleFactory.moduleName, photos.getLong('taken_time')))
+                    art.addAttribute(BlackboardAttribute(self.att_orientation, YourPhoneIngestModuleFactory.moduleName, photos.getString('orientation')))
+                    art.addAttribute(BlackboardAttribute(self.att_last_seen_time, YourPhoneIngestModuleFactory.moduleName, photos.getLong('last_seen_time')))
+                    art.addAttribute(BlackboardAttribute(self.att_width, YourPhoneIngestModuleFactory.moduleName, photos.getLong('width')))
+                    art.addAttribute(BlackboardAttribute(self.att_height, YourPhoneIngestModuleFactory.moduleName, photos.getLong('height')))
+
                 self.index_artifact(blackboard, art, self.art_photo)
             except Exception as e:
                 self.log(Level.SEVERE, str(e))

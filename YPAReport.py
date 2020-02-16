@@ -306,7 +306,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         call_history = html_file.select("#call-history-table")[0]
         call_history.append(tr_call)
     
-    def add_to_photos(self, html_file, username, photo_id, path, list_att):
+    def add_to_photos(self, html_file, username, photo_id, media_id, path, list_att):
         tr_photo = self.create_tr_for_table(html_file, username, photo_id, list_att)
 
         td = html_file.new_tag("td")
@@ -315,13 +315,13 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # img['width'] = "200"
         # img['height'] = "200"
         img['class'] = "img-fluid img-thumbnail"
-        img['alt'] = "Image error"
+        img['alt'] = "No image available"
         td.append(img)
         tr_photo.append(td)
 
 
         img['data-toggle'] = "modal"
-        img['data-target'] = HTML_MODAL_PREFIX + photo_id + username
+        img['data-target'] = HTML_MODAL_PREFIX + media_id + username
 
         photos = html_file.select("#photo-table")[0]
         photos.append(tr_photo)
@@ -478,8 +478,14 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         att_last_updated = skCase.getAttributeType("YPA_LAST_UPDATE_TIME")
 
         att_photo_id = skCase.getAttributeType("YPA_PHOTO_ID")
+        att_media_id = skCase.getAttributeType("YPA_MEDIA_ID")
         att_pic_size = skCase.getAttributeType("YPA_PIC_SIZE")
         att_uri = skCase.getAttributeType("YPA_URI")
+        att_taken_time = skCase.getAttributeType("YPA_TAKEN_TIME")
+        att_orientation = skCase.getAttributeType("YPA_ORIENTATION")
+        att_last_seen_time = skCase.getAttributeType("YPA_LAST_SEEN_TIME")
+        att_width = skCase.getAttributeType("YPA_WIDTH")
+        att_height = skCase.getAttributeType("YPA_HEIGHT")
 
         att_call_id = skCase.getAttributeType("YPA_CALL_ID")
         att_duration = skCase.getAttributeType("YPA_CALL_DURATION")
@@ -553,14 +559,21 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         for artifact in art_list_photos:
             # Get artifact info
             photo_id = artifact.getAttribute(att_photo_id).getValueString()
+            media_id = artifact.getAttribute(att_media_id).getValueString()
             name = artifact.getAttribute(att_display_name).getValueString()
             last_updated = self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong())
             size = artifact.getAttribute(att_pic_size).getValueString()
             uri = artifact.getAttribute(att_uri).getValueString()
+            taken_time = self.unix_to_date_string(artifact.getAttribute(att_taken_time).getValueLong())
+            orientation = artifact.getAttribute(att_orientation).getValueString()
+            last_seen_time = self.unix_to_date_string(artifact.getAttribute(att_last_seen_time).getValueLong())
+            width = str(artifact.getAttribute(att_width).getValueLong())
+            height = str(artifact.getAttribute(att_height).getValueLong())
             username = artifact.getArtifactTypeName().split('_')[-1]
             # guid = artifact.getArtifactTypeName().split('_')[-2]
             artifact_obj_id = artifact.getObjectID()
             source_file = self.get_file_by_artifact(skCase, artifact)
+            self.log(Level.INFO, "Width " + width + " Height " + height)
 
             if not source_file or not source_file.exists():
                 # getAbstractFileById can return null.
@@ -577,14 +590,22 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                     db_conn, db_path = db_functions.create_db_conn(self, source_file)
             
             try:
-                query = "select thumbnail, blob from photo where photo_id = " + photo_id
-                rs = db_functions.execute_query(self, query, db_conn)
-                rs.next()
+                query = "select m.thumbnail, media, m.id \
+                    from media m \
+                    left join photo p on m.name = p.name \
+                    where id = " + media_id
                 
-                self.save_photo(rs.getBytes('blob'), baseReportDir, name)
-                self.add_photo_modal(html_ypa_photos, name, photo_id, username)
-                self.add_to_photos(html_ypa_photos, username, photo_id, name, [name, last_updated, size, uri])
-            except NullPointerException as e:
+                rs = db_functions.execute_query(self, query, db_conn)
+                if not rs.isClosed():
+                    rs.next()
+                    image_bytes = rs.getBytes('media') or rs.getBytes('thumbnail')
+                    if image_bytes is not None:
+                        self.save_photo(image_bytes, baseReportDir, name)
+                        self.add_photo_modal(html_ypa_photos, name, media_id, username)
+                self.add_to_photos(html_ypa_photos, username, photo_id, media_id, name, [name, last_updated, size, media_id, uri, taken_time, orientation, last_seen_time, width, height])
+
+                rs.close()
+            except Exception as e:
                 self.log(Level.INFO, "WARNING: Failed to get image for " + name + " due to " + str(e))
             finally:
                 last_obj_id = artifact_obj_id

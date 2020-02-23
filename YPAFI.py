@@ -63,7 +63,7 @@ MMS_QUERY = "select mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.te
 ADDRESS_TYPE = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 'Office phone number' , '4' : 'Unknown' , '5' : 'Main phone number' , '6' : 'Other phone number'}
 PHOTOS_QUERY = "select photo_id, name, (last_updated_time/ 10000000 - 11644473600) as last_updated_time, size, uri, thumbnail, blob from photo" 
 PHOTOS_MEDIA_QUERY = "SELECT m.id, IFNULL(p.photo_id, 'N/A') as photo_id, m.name, (m.last_updated_time / 10000000 - 11644473600) as last_updated_time, \
-    (m.taken_time / 10000000 - 11644473600) as taken_time, m.size, m.uri, IFNULL(NULLIF(m.orientation, ''), 'N/A') as orientation, \
+    (m.taken_time / 10000000 - 11644473600) as taken_time, m.size, IFNULL(p.uri, m.uri) as uri, IFNULL(NULLIF(m.orientation, ''), 'N/A') as orientation, \
     IFNULL(m.last_seen_time, 0) as last_seen_time, height, width \
 FROM media m \
 LEFT JOIN photo p ON m.name = p.name;"
@@ -81,9 +81,10 @@ MESSAGES_QUERY_ATTACHED = "SELECT m.thread_id, m.message_id, con.recipient_list,
     CASE WHEN ifnull(m.from_address,'Self') = '' THEN 'Self' ELSE ifnull(m.from_address,'Self') END AS from_address, \
     (m.timestamp / 10000000 - 11644473600) AS timestamp \
 FROM message m \
-LEFT JOIN contactsDB.phonenumber a on m.from_address = a.phone_number \
+LEFT JOIN (SELECT * FROM phonenumber WHERE contact_id IN (SELECT contact_id FROM contact)) a on m.from_address = a.phone_number \
 LEFT JOIN contactsDB.contact c ON a.contact_id = c.contact_id \
 JOIN conversation con on con.thread_id = m.thread_id \
+GROUP BY m.message_id \
 ORDER BY m.message_id;"
 MMS_QUERY_ATTACHED = "SELECT mp.message_id, mm.thread_id, mp.content_type, mp.name, mp.text, ifnull(c.display_name,'n/a') as display_name, ma.address \
 FROM mms_part mp \
@@ -346,7 +347,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 
                 if has_contacts_db:
                     # We are in a new DB schema!
-                    contact_db_path = (file.getLocalPath().rsplit('\\', 1)[0] + "\\contacts.db")
+                    contact_db_path = os.path.join(file.getLocalPath().rsplit('\\', 1)[0], "contacts.db")
                     attach_query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB")
                     dbConn = db_functions.execute_statement(self, attach_query, dbConn, file.getName())
                     self.processContacts(db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)

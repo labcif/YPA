@@ -26,20 +26,21 @@ def execute_statement(self, query, db_conn, db_name = "UNKNOWN"):
 def create_db_conn(self, file, temp_dir = None):
     if not temp_dir:
         temp_dir = self.temp_dir
-    dbPath = os.path.join(temp_dir , str(file.getName()))
-    ContentUtils.writeToFile(file, File(dbPath))
+    db_path = os.path.join(temp_dir, str(file.getName()))
+    ContentUtils.writeToFile(file, File(db_path))
     try:
         Class.forName("org.sqlite.JDBC").newInstance()
         config = SQLiteConfig()
         config.setEncoding(SQLiteConfig.Encoding.UTF8)
         # config.setJournalMode(JournalMode.WAL)
         # config.setReadOnly(True)
-        return DriverManager.getConnection(
-            "jdbc:sqlite:%s" % dbPath, config.toProperties()), dbPath
+        db_conn = DriverManager.getConnection("jdbc:sqlite:%s" % db_path, config.toProperties())
+        execute_query(self, "PRAGMA wal_checkpoint", db_conn, file.getName())
+        return db_conn, db_path
     except Exception as e:
         self.log(Level.SEVERE, "Could not create database connection for " +
-                    dbPath + " (" + str(e) + ")")
-    return None, dbPath
+                    db_path + " (" + str(e) + ")")
+    return None, db_path
 
 def close_db_conn(self, db_conn, db_path):
     db_conn.close()

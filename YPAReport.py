@@ -562,7 +562,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             media_id = artifact.getAttribute(att_media_id).getValueString()
             name = artifact.getAttribute(att_display_name).getValueString()
             last_updated = self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong())
-            size = artifact.getAttribute(att_pic_size).getValueString()
+            size = str(artifact.getAttribute(att_pic_size).getValueLong())
             uri = artifact.getAttribute(att_uri).getValueString()
             taken_time = self.unix_to_date_string(artifact.getAttribute(att_taken_time).getValueLong())
             orientation = artifact.getAttribute(att_orientation).getValueString()
@@ -573,7 +573,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             # guid = artifact.getArtifactTypeName().split('_')[-2]
             artifact_obj_id = artifact.getObjectID()
             source_file = self.get_file_by_artifact(skCase, artifact)
-            self.log(Level.INFO, "Width " + width + " Height " + height)
 
             if not source_file or not source_file.exists():
                 # getAbstractFileById can return null.

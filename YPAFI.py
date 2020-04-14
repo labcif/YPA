@@ -108,6 +108,15 @@ LEFT JOIN contactsDB.phonenumber pn ON ch.phone_number = pn.display_phone_number
 LEFT JOIN contactsDB.contact c ON pn.contact_id = c.contact_id \
 WHERE pn.display_phone_number IS NULL"
 
+CALL_TYPE = {
+    '1' : 'Incoming',
+    '2' : 'Outgoing',
+    '3' : 'Missed'
+}
+IS_READ_TYPE = {
+    0 : 'Taken',
+    1 : 'Missed'
+}
 # Factory that defines the name and details of the module and allows Autopsy
 # to create instances of the modules that will do the analysis.
 class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
@@ -716,12 +725,11 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 art.addAttribute(BlackboardAttribute(self.att_display_name, YourPhoneIngestModuleFactory.moduleName, call_history.getString('display_name')))
                 art.addAttribute(BlackboardAttribute(self.att_address, YourPhoneIngestModuleFactory.moduleName, address))
                 art.addAttribute(BlackboardAttribute(self.att_duration, YourPhoneIngestModuleFactory.moduleName, call_history.getLong('duration')))
-                # TODO: Determine what call type is
-                art.addAttribute(BlackboardAttribute(self.att_call_type, YourPhoneIngestModuleFactory.moduleName, call_history.getString('call_type')))
+                art.addAttribute(BlackboardAttribute(self.att_call_type, YourPhoneIngestModuleFactory.moduleName, CALL_TYPE[call_history.getString('call_type')]))
                 art.addAttribute(BlackboardAttribute(self.att_start_time, YourPhoneIngestModuleFactory.moduleName, start_time))
                 art.addAttribute(BlackboardAttribute(self.att_last_updated_time, YourPhoneIngestModuleFactory.moduleName, call_history.getLong('last_updated_time')))
-                is_read = call_history.getInt("is_read")
-                art.addAttribute(BlackboardAttribute(self.att_is_read, YourPhoneIngestModuleFactory.moduleName, str(is_read == 1)))
+                is_read = IS_READ_TYPE[call_history.getInt("is_read")]
+                art.addAttribute(BlackboardAttribute(self.att_is_read, YourPhoneIngestModuleFactory.moduleName, is_read))
                 self.index_artifact(blackboard, art, self.art_call)
                 
                 # Create TSK call, for comms relationships

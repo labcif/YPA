@@ -64,7 +64,7 @@ ADDRESS_TYPE = {'1' : 'Home phone number' , '2' : 'Mobile phone number' , '3' : 
 PHOTOS_QUERY = "select photo_id, name, (last_updated_time/ 10000000 - 11644473600) as last_updated_time, size, uri, thumbnail, blob from photo" 
 PHOTOS_MEDIA_QUERY = "SELECT m.id, IFNULL(p.photo_id, 'N/A') as photo_id, m.name, (m.last_updated_time / 10000000 - 11644473600) as last_updated_time, \
     (m.taken_time / 10000000 - 11644473600) as taken_time, m.size, IFNULL(p.uri, m.uri) as uri, IFNULL(NULLIF(m.orientation, ''), 'N/A') as orientation, \
-    IFNULL(m.last_seen_time, 0) as last_seen_time, height, width \
+    (m.last_seen_time / 10000000 - 11644473600) as last_seen_time, height, width \
 FROM media m \
 LEFT JOIN photo p ON m.name = p.name;"
 APPS_QUERY = "select app_name, package_name, version, etag from phone_apps"
@@ -267,9 +267,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_photo_id = self.create_attribute_type('YPA_PHOTO_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Photo ID", skCase)
         self.att_uri = self.create_attribute_type('YPA_URI', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "URI", skCase)
         self.att_media_id = self.create_attribute_type('YPA_MEDIA_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Media ID", skCase)
-        self.att_taken_time = self.create_attribute_type('YPA_TAKEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Taken time", skCase)
+        self.att_taken_time = self.create_attribute_type('YPA_TAKEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Taken time", skCase)
         self.att_orientation = self.create_attribute_type('YPA_ORIENTATION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Orientation", skCase)
-        self.att_last_seen_time = self.create_attribute_type('YPA_LAST_SEEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Last seen", skCase)
+        self.att_last_seen_time = self.create_attribute_type('YPA_LAST_SEEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Last seen", skCase)
         self.att_height = self.create_attribute_type('YPA_HEIGHT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Height", skCase)
         self.att_width = self.create_attribute_type('YPA_WIDTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Width", skCase)
 

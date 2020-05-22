@@ -28,6 +28,7 @@ from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.datamodel import SleuthkitCase
 from org.sleuthkit.datamodel import AbstractFile
+from org.sleuthkit.datamodel import TskCoreException
 from org.sleuthkit.autopsy.casemodule.services import Blackboard
 from org.sleuthkit.datamodel import ReadContentInputStream
 from org.sleuthkit.datamodel import BlackboardArtifact
@@ -194,27 +195,26 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             ModuleDataEvent(YourPhoneIngestModuleFactory.moduleName,
                             artifact_type, None))
 
-    def create_artifact_type(self, art_name, art_desc, skCase):
+    def create_artifact_type(self, art_name, art_desc, blackboard):
         try:
-            skCase.addBlackboardArtifactType(art_name, "YPA: " + art_desc)
-        except:
-            self.log(Level.INFO, "Error creating artifact type: " + art_desc)
-        art = skCase.getArtifactType(art_name)
-        self.art_list.append(art)
+            art = blackboard.getOrAddArtifactType(art_name, "YPA: " + art_desc)
+            self.art_list.append(art)
+        except Exception as e :
+            self.log(Level.INFO, "Error getting or adding artifact type: " + art_desc + " " + str(e))
         return art
 
-    def create_attribute_type(self, att_name, type, att_desc, skCase):
+    def create_attribute_type(self, att_name, type_name, att_desc, blackboard):
         try:
-            skCase.addArtifactAttributeType(att_name, type, att_desc)
-        except:
-            self.log(Level.INFO, "Error creating attribute type: " + att_desc)
-        return skCase.getAttributeType(att_name)
+            att_type = blackboard.getOrAddAttributeType(att_name, type_name, att_desc)
+        except Exception as e:
+            self.log(Level.INFO, "Error getting or adding attribute type: " + att_desc + " " + str(e))
+        return att_type
 
     # Where any setup and configuration is done
     # 'context' is an instance of org.sleuthkit.autopsy.ingest.IngestJobContext.
     # See: http://sleuthkit.org/autopsy/docs/api-docs/3.1/classorg_1_1sleuthkit_1_1autopsy_1_1ingest_1_1_ingest_job_context.html
     def startUp(self, context):
-        skCase = Case.getCurrentCase().getSleuthkitCase()
+        blackboard = Case.getCurrentCase().getServices().getBlackboard()
         self.temp_dir = Case.getCurrentCase().getTempDirectory()
         if PlatformUtil.isWindowsOS():
             #self.path_to_exe = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ypa.exe") #OLD
@@ -224,80 +224,80 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         
 
         # Settings attributes
-        self.att_dp_type = self.create_attribute_type('YPA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", skCase)
-        self.att_dp_offset = self.create_attribute_type('YPA_DP_OFFSET', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Offset", skCase)
-        self.att_dp_length = self.create_attribute_type('YPA_DP_LENGTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Length", skCase)
-        self.att_dp_data = self.create_attribute_type('YPA_DP_DATA', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data", skCase)
+        self.att_dp_type = self.create_attribute_type('YPA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", blackboard)
+        self.att_dp_offset = self.create_attribute_type('YPA_DP_OFFSET', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Offset", blackboard)
+        self.att_dp_length = self.create_attribute_type('YPA_DP_LENGTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Length", blackboard)
+        self.att_dp_data = self.create_attribute_type('YPA_DP_DATA', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data", blackboard)
         
         # Address attributes
-        self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact ID", skCase)
-        self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", skCase)
-        self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", skCase)
-        self.att_address_type = self.create_attribute_type('YPA_ADDRESS_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address type", skCase)
-        self.att_times_contacted = self.create_attribute_type('YPA_TIMES_CONTACTED', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Times contacted", skCase)
-        self.att_last_contacted_time = self.create_attribute_type('YPA_LAST_CONTACT_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Last contacted time", skCase) 
+        self.att_contact_id = self.create_attribute_type('YPA_CONTACT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Contact ID", blackboard)
+        self.att_address = self.create_attribute_type('YPA_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address", blackboard)
+        self.att_display_name = self.create_attribute_type('YPA_DISPLAY_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Display name", blackboard)
+        self.att_address_type = self.create_attribute_type('YPA_ADDRESS_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Address type", blackboard)
+        self.att_times_contacted = self.create_attribute_type('YPA_TIMES_CONTACTED', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Times contacted", blackboard)
+        self.att_last_contacted_time = self.create_attribute_type('YPA_LAST_CONTACT_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Last contacted time", blackboard) 
         
         # Last updated time
-        self.att_last_updated_time = self.create_attribute_type('YPA_LAST_UPDATE_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Last updated time", skCase) 
+        self.att_last_updated_time = self.create_attribute_type('YPA_LAST_UPDATE_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Last updated time", blackboard) 
 
         # Conversations attributes
-        self.att_thread_id = self.create_attribute_type('YPA_THREAD_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Thread ID", skCase) 
-        self.att_message_id = self.create_attribute_type('YPA_MESSAGE_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message ID", skCase) 
-        self.att_recipient_list = self.create_attribute_type('YPA_RECIPIENT_LIST', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Recipients", skCase) 
-        self.att_from_address = self.create_attribute_type('YPA_FROM_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING , "Address", skCase) 
-        self.att_body = self.create_attribute_type('YPA_BODY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message body", skCase) 
-        self.att_status = self.create_attribute_type('YPA_STATUS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", skCase)         
-        self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Timestamp", skCase)      
+        self.att_thread_id = self.create_attribute_type('YPA_THREAD_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Thread ID", blackboard) 
+        self.att_message_id = self.create_attribute_type('YPA_MESSAGE_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message ID", blackboard) 
+        self.att_recipient_list = self.create_attribute_type('YPA_RECIPIENT_LIST', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Recipients", blackboard) 
+        self.att_from_address = self.create_attribute_type('YPA_FROM_ADDRESS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING , "Address", blackboard) 
+        self.att_body = self.create_attribute_type('YPA_BODY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Message body", blackboard) 
+        self.att_status = self.create_attribute_type('YPA_STATUS', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Status", blackboard)         
+        self.att_timestamp = self.create_attribute_type('YPA_TIMESTAMP', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Timestamp", blackboard)      
 
         # MMS-related attributes
-        self.att_mms_text = self.create_attribute_type('YPA_MMS_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", skCase)
-        self.att_num_of_files = self.create_attribute_type('YPA_NUM_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Number of files", skCase)
-        self.att_name_of_files = self.create_attribute_type('YPA_NAME_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Name of files", skCase)
+        self.att_mms_text = self.create_attribute_type('YPA_MMS_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", blackboard)
+        self.att_num_of_files = self.create_attribute_type('YPA_NUM_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Number of files", blackboard)
+        self.att_name_of_files = self.create_attribute_type('YPA_NAME_OF_FILES', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Name of files", blackboard)
      
         # Picture size (B)
-        self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", skCase)
+        self.att_pic_size = self.create_attribute_type('YPA_PIC_SIZE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Picture size (B)", blackboard)
 
         # DB User Version
-        self.att_db_uv = self.create_attribute_type('YPA_DB_UV', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "SQLite User Version", skCase)
+        self.att_db_uv = self.create_attribute_type('YPA_DB_UV', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "SQLite User Version", blackboard)
 
         # Recovered rows
-        self.att_rec_row = self.create_attribute_type('YPA_REC_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data recovered from unvacuumed row", skCase)
+        self.att_rec_row = self.create_attribute_type('YPA_REC_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data recovered from unvacuumed row", blackboard)
         
         # photo.db photo attributes
-        self.att_photo_id = self.create_attribute_type('YPA_PHOTO_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Photo ID", skCase)
-        self.att_uri = self.create_attribute_type('YPA_URI', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "URI", skCase)
-        self.att_media_id = self.create_attribute_type('YPA_MEDIA_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Media ID", skCase)
-        self.att_taken_time = self.create_attribute_type('YPA_TAKEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Taken time", skCase)
-        self.att_orientation = self.create_attribute_type('YPA_ORIENTATION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Orientation", skCase)
-        self.att_last_seen_time = self.create_attribute_type('YPA_LAST_SEEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Last seen", skCase)
-        self.att_height = self.create_attribute_type('YPA_HEIGHT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Height", skCase)
-        self.att_width = self.create_attribute_type('YPA_WIDTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Width", skCase)
+        self.att_photo_id = self.create_attribute_type('YPA_PHOTO_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Photo ID", blackboard)
+        self.att_uri = self.create_attribute_type('YPA_URI', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "URI", blackboard)
+        self.att_media_id = self.create_attribute_type('YPA_MEDIA_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Media ID", blackboard)
+        self.att_taken_time = self.create_attribute_type('YPA_TAKEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Taken time", blackboard)
+        self.att_orientation = self.create_attribute_type('YPA_ORIENTATION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Orientation", blackboard)
+        self.att_last_seen_time = self.create_attribute_type('YPA_LAST_SEEN_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Last seen", blackboard)
+        self.att_height = self.create_attribute_type('YPA_HEIGHT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Height", blackboard)
+        self.att_width = self.create_attribute_type('YPA_WIDTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Width", blackboard)
 
         # Apps from settings.db
-        self.att_package_name = self.create_attribute_type('YPA_APP_PACKAGE_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Package name", skCase)
-        self.att_version = self.create_attribute_type('YPA_APP_VERSION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Version", skCase)
-        self.att_app_etag = self.create_attribute_type('YPA_APP_ETAG', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Etag", skCase)
+        self.att_package_name = self.create_attribute_type('YPA_APP_PACKAGE_NAME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Package name", blackboard)
+        self.att_version = self.create_attribute_type('YPA_APP_VERSION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Version", blackboard)
+        self.att_app_etag = self.create_attribute_type('YPA_APP_ETAG', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Etag", blackboard)
 
         # Settings from settings.db
-        self.att_setting_group_id = self.create_attribute_type('YPA_SETTING_GROUP_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting Group ID", skCase)
-        self.att_setting_key = self.create_attribute_type('YPA_SETTING_KEY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting key", skCase)
-        self.att_setting_type = self.create_attribute_type('YPA_SETTING_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting type", skCase)
-        self.att_setting_value = self.create_attribute_type('YPA_SETTING_VALUE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting value", skCase)
+        self.att_setting_group_id = self.create_attribute_type('YPA_SETTING_GROUP_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting Group ID", blackboard)
+        self.att_setting_key = self.create_attribute_type('YPA_SETTING_KEY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting key", blackboard)
+        self.att_setting_type = self.create_attribute_type('YPA_SETTING_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting type", blackboard)
+        self.att_setting_value = self.create_attribute_type('YPA_SETTING_VALUE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Setting value", blackboard)
 
         # Notifications from notifications.db
-        self.att_post_time = self.create_attribute_type('YPA_POST_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Post time", skCase)
-        self.att_notification_id = self.create_attribute_type('YPA_NOTIFICATION_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Notification ID", skCase)
-        self.att_anon_id = self.create_attribute_type('YPA_ANON_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Anonymous ID", skCase)
-        self.att_state = self.create_attribute_type('YPA_STATE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "State", skCase)
-        self.att_full_json = self.create_attribute_type('YPA_FULL_JSON', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Full JSON", skCase)
-        self.att_text = self.create_attribute_type('YPA_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", skCase)
+        self.att_post_time = self.create_attribute_type('YPA_POST_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Post time", blackboard)
+        self.att_notification_id = self.create_attribute_type('YPA_NOTIFICATION_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Notification ID", blackboard)
+        self.att_anon_id = self.create_attribute_type('YPA_ANON_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Anonymous ID", blackboard)
+        self.att_state = self.create_attribute_type('YPA_STATE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "State", blackboard)
+        self.att_full_json = self.create_attribute_type('YPA_FULL_JSON', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Full JSON", blackboard)
+        self.att_text = self.create_attribute_type('YPA_TEXT', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Text", blackboard)
 
         # Call history from calling.db
-        self.att_call_id = self.create_attribute_type('YPA_CALL_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Call ID", skCase)
-        self.att_duration = self.create_attribute_type('YPA_CALL_DURATION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Duration", skCase)
-        self.att_call_type = self.create_attribute_type('YPA_CALL_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Call type", skCase)
-        self.att_start_time = self.create_attribute_type('YPA_START_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Start time", skCase)
-        self.att_is_read = self.create_attribute_type('YPA_IS_READ', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Is read", skCase)
+        self.att_call_id = self.create_attribute_type('YPA_CALL_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Call ID", blackboard)
+        self.att_duration = self.create_attribute_type('YPA_CALL_DURATION', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.LONG, "Duration", blackboard)
+        self.att_call_type = self.create_attribute_type('YPA_CALL_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Call type", blackboard)
+        self.att_start_time = self.create_attribute_type('YPA_START_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Start time", blackboard)
+        self.att_is_read = self.create_attribute_type('YPA_IS_READ', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Is read", blackboard)
 
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
@@ -311,7 +311,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         
         files = fileManager.findFiles(dataSource, "phone.db") 
         self.log(Level.INFO, "Found " + str(len(files)) + " files (phone.db)")
-        self.anyValidFileFound = False
+        self.valid_files_found = False
+        
         for file in files:
             full_path = (file.getParentPath() + file.getName())
             dbConn, dbPath = db_functions.create_db_conn(self, file)
@@ -324,25 +325,25 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     except IndexError:
                         username = "UNKNOWN"
                         guid = "UNKNOWN"
-                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_" + guid + "_" + username,"User " + username + " - Contacts", skCase)
-                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_" + guid + "_" + username,"User " + username + " - SMS", skCase)
-                    self.art_mms = self.create_artifact_type("YPA_MMS_" + guid + "_" + username,"User " + username + " - MMS", skCase)
-                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_" + guid + "_" + username,"User " + username +  " - Recent pictures", skCase)
-                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_" + guid + "_" + username,"User " + username +  " - Rows recovered (undark)", skCase)
-                    self.art_dp = self.create_artifact_type("YPA_DP_" + guid + "_" + username,"User " + username + " - Rows recovered (Delete parser)", skCase)
-                    self.art_settings = self.create_artifact_type("YPA_SETTINGS_" + guid + "_" + username,"User " + username + " - Database settings", skCase)
-                    self.art_photo = self.create_artifact_type("YPA_PHOTO_" + guid + "_" + username, "User " + username + " - Photos", skCase)
-                    self.art_phone_app = self.create_artifact_type("YPA_PHONE_APP_" + guid + "_" + username, "User " + username + " - Phone apps", skCase)
-                    self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + guid + "_" + username, "User " + username + " - Phone settings", skCase)
-                    self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + guid + "_" + username, "User " + username + " - Notifications", skCase)
-                    self.art_call = self.create_artifact_type("YPA_CALLING_" + guid + "_" + username, "User " + username + " - Call history", skCase)
+                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_" + guid + "_" + username,"User " + username + " - Contacts", blackboard)
+                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_" + guid + "_" + username,"User " + username + " - SMS", blackboard)
+                    self.art_mms = self.create_artifact_type("YPA_MMS_" + guid + "_" + username,"User " + username + " - MMS", blackboard)
+                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_" + guid + "_" + username,"User " + username +  " - Recent pictures", blackboard)
+                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_" + guid + "_" + username,"User " + username +  " - Rows recovered (undark)", blackboard)
+                    self.art_dp = self.create_artifact_type("YPA_DP_" + guid + "_" + username,"User " + username + " - Rows recovered (Delete parser)", blackboard)
+                    self.art_settings = self.create_artifact_type("YPA_SETTINGS_" + guid + "_" + username,"User " + username + " - Database settings", blackboard)
+                    self.art_photo = self.create_artifact_type("YPA_PHOTO_" + guid + "_" + username, "User " + username + " - Photos", blackboard)
+                    self.art_phone_app = self.create_artifact_type("YPA_PHONE_APP_" + guid + "_" + username, "User " + username + " - Phone apps", blackboard)
+                    self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + guid + "_" + username, "User " + username + " - Phone settings", blackboard)
+                    self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + guid + "_" + username, "User " + username + " - Notifications", blackboard)
+                    self.art_call = self.create_artifact_type("YPA_CALLING_" + guid + "_" + username, "User " + username + " - Call history", blackboard)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
 
                 self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", dbConn, file.getName()), file, blackboard, skCase)
 
-                self.anyValidFileFound = True
+                self.valid_files_found = True
 
                 # Other YP databases
                 dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
@@ -451,7 +452,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             except Exception as e:
                 self.log(Level.SEVERE, "Failed to obtain Recent photos")
                 continue
-        if not self.anyValidFileFound:
+        
+        if not self.valid_files_found:
             Message.info("YPA: No valid database file found")
             
         return IngestModule.ProcessResult.OK   
@@ -523,7 +525,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         if not messages:
             return
         commManager = skCase.getCommunicationsManager()
-        self_contact = self.get_or_create_account(commManager, file, username)
+        # "0" is a workaround for the username... Seems like strings are invalid inputs for Autopsy...
+        self_contact = self.get_or_create_account(commManager, file, "0")
         while messages.next():
             try:
                 timestamp = messages.getLong('timestamp')
@@ -551,25 +554,28 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 #    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DIRECTION, YourPhoneIngestModuleFactory.moduleName, NbBundle.getMessage(this.getClass(), "TextMessageAnalyzer.bbAttribute.outgoing")))
                 #}
 
-                other_contact = self.get_or_create_account(commManager, file, recipients)
+                try:
+                    other_contact = self.get_or_create_account(commManager, file, recipients)
 
-                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_FROM, YourPhoneIngestModuleFactory.moduleName, from_address))
-                if from_address == "Self":
-                    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_TO, \
-                        YourPhoneIngestModuleFactory.moduleName, recipients))
-                    commManager.addRelationships(self_contact, [other_contact], art, Relationship.Type.MESSAGE, timestamp)
-                    # self.log(Level.INFO, "INFO HERE: FROM (SELF!) " + from_address + " TO " + recipients)
-                else:
-                    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_TO, \
-                        YourPhoneIngestModuleFactory.moduleName, "Self (" + username + ")"))
-                    commManager.addRelationships(other_contact, [self_contact], art, Relationship.Type.MESSAGE, timestamp)
-                    # self.log(Level.INFO, "INFO HERE: FROM " + from_address + " TO SELF" )
-                # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DIRECTION, YourPhoneIngestModuleFactory.moduleName, type))
-                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, YourPhoneIngestModuleFactory.moduleName, timestamp))
-                # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SUBJECT, YourPhoneIngestModuleFactory.moduleName, subject))
-                art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TEXT, YourPhoneIngestModuleFactory.moduleName, body))
-                # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_MESSAGE_TYPE, YourPhoneIngestModuleFactory.moduleName, NbBundle.getMessage(this.getClass(), "TextMessageAnalyzer.bbAttribute.smsMessage")))           
-                self.index_artifact(blackboard, art, BlackboardArtifact.ARTIFACT_TYPE.TSK_MESSAGE)
+                    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_FROM, YourPhoneIngestModuleFactory.moduleName, from_address))
+                    if from_address == "Self":
+                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_TO, \
+                            YourPhoneIngestModuleFactory.moduleName, recipients))
+                        commManager.addRelationships(self_contact, [other_contact], art, Relationship.Type.MESSAGE, timestamp)
+                        # self.log(Level.INFO, "INFO HERE: FROM (SELF!) " + from_address + " TO " + recipients)
+                    else:
+                        art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_TO, \
+                            YourPhoneIngestModuleFactory.moduleName, "Self (" + username + ")"))
+                        commManager.addRelationships(other_contact, [self_contact], art, Relationship.Type.MESSAGE, timestamp)
+                        # self.log(Level.INFO, "INFO HERE: FROM " + from_address + " TO SELF" )
+                    # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DIRECTION, YourPhoneIngestModuleFactory.moduleName, type))
+                    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME, YourPhoneIngestModuleFactory.moduleName, timestamp))
+                    # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_SUBJECT, YourPhoneIngestModuleFactory.moduleName, subject))
+                    art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_TEXT, YourPhoneIngestModuleFactory.moduleName, body))
+                    # art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_MESSAGE_TYPE, YourPhoneIngestModuleFactory.moduleName, NbBundle.getMessage(this.getClass(), "TextMessageAnalyzer.bbAttribute.smsMessage")))           
+                    self.index_artifact(blackboard, art, BlackboardArtifact.ARTIFACT_TYPE.TSK_MESSAGE)
+                except TskCoreException as e:
+                    self.log(Level.INFO, "Autopsy tagged " + recipients + " as an invalid phone number.")
 
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
@@ -711,7 +717,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         call_history = db_functions.execute_query(self, CALLINGS_QUERY, db_conn, db.getName())
         
         commManager = skCase.getCommunicationsManager()
-        self_contact = self.get_or_create_account(commManager, db, username)
+        # "0" is a workaround for the username... Seems like strings are invalid inputs for Autopsy...
+        self_contact = self.get_or_create_account(commManager, db, "0")
 
         if not call_history:
             return

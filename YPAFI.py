@@ -56,6 +56,7 @@ from org.sleuthkit.datamodel import Relationship
 from org.sleuthkit.datamodel import Account
 
 from db import db_functions
+from crawler import wal_crawler
 
 # DB queries
 CONTACT_QUERY = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, (a.last_contacted_time / 10000000 - 11644473600) as last_contacted_time,  (c.last_updated_time/ 10000000 - 11644473600) as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
@@ -347,6 +348,19 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
                 # Other YP databases
                 dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
+                
+                wal_files = fileManager.findFiles(dataSource, "%.db-wal", file.getParentPath())
+                for wal_file in wal_files:
+                    try:
+                        self.log(Level.INFO, "Crawling " + wal_file.getName())
+                        wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
+                        ContentUtils.writeToFile(wal_file, File(wal_path))
+                        wal_crawler.crawl(wal_path, self.temp_dir, wal_file.getName() + '.csv')
+                        self.log(Level.INFO, "Successfully crawled for " + wal_file.getName())
+                    except Exception as e:
+                        self.log(Level.INFO, "Failed to crawl for " + wal_file.getName())
+                        self.log(Level.SEVERE, str(e))
+                
                 # dbs = [item for item in dbs if "phone.db" not in item.getName()]
                 # Jython does not support Stream predicates... :'( Ugly code follows
                 has_contacts_db = False
@@ -379,7 +393,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                             self.process_calling(db, blackboard, skCase, attach_query, username)
                             continue
                         if "contacts.db" in db_name:
-                            self.process_recovery(contact_db_path, db)
+                            self.process_recovery(contact_db_path, db, blackboard)
                             continue
                 else:
                     self.processContacts(db_functions.execute_query(self, CONTACT_QUERY, dbConn, file.getName()), file, blackboard, skCase)
@@ -400,7 +414,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 
                 # self.log(Level.INFO, "Number of dbs: " + str(len(dbs)))
                 # Undark and mdg
-                self.process_recovery(dbPath, file)
+                self.process_recovery(dbPath, file, blackboard)
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
                 continue
@@ -581,7 +595,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_photos(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
-        self.process_recovery(db_path, db)
+        self.process_recovery(db_path, db, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         
@@ -621,7 +635,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_settings(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
-        self.process_recovery(db_path, db)
+        self.process_recovery(db_path, db, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         apps = db_functions.execute_query(self, APPS_QUERY, db_conn, db.getName())
@@ -657,7 +671,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_notifications(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
-        self.process_recovery(db_path, db)
+        self.process_recovery(db_path, db, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         notifications = db_functions.execute_query(self, NOTIFICATIONS_QUERY, db_conn, db.getName())
@@ -686,7 +700,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     
     def process_calling(self, db, blackboard, skCase, attach_query, username):
         db_conn, db_path = db_functions.create_db_conn(self, db)
-        self.process_recovery(db_path, db)
+        self.process_recovery(db_path, db, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         
@@ -731,7 +745,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         
         db_functions.close_db_conn(self, db_conn, db_path)
 
-    def process_recovery(self, db_path, file):
+    def process_recovery(self, db_path, file, blackboard):
         self.log(Level.INFO, "Starting recovery...")
         if PlatformUtil.isWindowsOS():                
             try:

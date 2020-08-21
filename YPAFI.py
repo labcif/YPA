@@ -5,7 +5,6 @@ import subprocess
 import time
 import json
 import sys
-import csv
 import mdgMod
 import json
 

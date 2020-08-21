@@ -7,7 +7,6 @@ import re
 import struct
 import sys
 from collections import namedtuple
-import unicodecsv as csv
 
 from tqdm import trange
 

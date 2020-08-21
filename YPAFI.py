@@ -375,8 +375,12 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                         if "photos.db" in db_name:
                             self.process_photos(db, blackboard, skCase)
                             continue
-                        if "calling.db":
+                        if "calling.db" in db_name:
                             self.process_calling(db, blackboard, skCase, attach_query, username)
+                            continue
+                        if "contacts.db" in db_name:
+                            self.process_recovery(contact_db_path, db)
+                            continue
                 else:
                     self.processContacts(db_functions.execute_query(self, CONTACT_QUERY, dbConn, file.getName()), file, blackboard, skCase)
                     self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY, dbConn, file.getName()), file, blackboard, skCase, username)
@@ -396,36 +400,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 
                 # self.log(Level.INFO, "Number of dbs: " + str(len(dbs)))
                 # Undark and mdg
-                if PlatformUtil.isWindowsOS():                
-                    try:
-                        with open(self.temp_dir+'\\freespace.txt','w') as f:
-                            subprocess.Popen([self.path_to_undark,'-i', dbPath, '--freespace'],stdout=f).communicate()
-                        with open(self.temp_dir+'\\freespace.txt','r') as f:
-                            # self.log(Level.INFO, ' '.join([self.path_to_undark,'-i', dbPath, '--freespace >']))
-                            # self.log(Level.INFO, "Called undark")
-                            line = f.readline()
-                            while line:
-                                # self.log(Level.INFO, "opened result")
-                                art = file.newArtifact(self.art_freespace.getTypeID())
-                                art.addAttribute(BlackboardAttribute(self.att_rec_row, YourPhoneIngestModuleFactory.moduleName, str(line)))
-                                self.index_artifact(blackboard, art,self.art_freespace)
-                                line = f.readline()
-                    except Exception as e:
-                        self.log(Level.SEVERE, str(e))
-                        pass
-                try:
-                    mdg = mdgMod.mdg_modified.sqlite_rec(dbPath)
-                    res = mdg.extract_deleted()
-                    for line in res:
-                        art = file.newArtifact(self.art_dp.getTypeID())
-                        art.addAttribute(BlackboardAttribute(self.att_dp_type, YourPhoneIngestModuleFactory.moduleName, str(line[0])))
-                        art.addAttribute(BlackboardAttribute(self.att_dp_offset, YourPhoneIngestModuleFactory.moduleName, str(line[1])))
-                        art.addAttribute(BlackboardAttribute(self.att_dp_length, YourPhoneIngestModuleFactory.moduleName, str(line[2])))
-                        art.addAttribute(BlackboardAttribute(self.att_dp_data, YourPhoneIngestModuleFactory.moduleName, str(line[3])))
-                        self.index_artifact(blackboard, art,self.art_dp)                 
-                except Exception as e:
-                        self.log(Level.SEVERE, str(e))
-                        pass
+                self.process_recovery(dbPath, file)
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
                 continue
@@ -606,6 +581,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_photos(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
+        self.process_recovery(db_path, db)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         
@@ -645,6 +621,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_settings(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
+        self.process_recovery(db_path, db)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         apps = db_functions.execute_query(self, APPS_QUERY, db_conn, db.getName())
@@ -680,6 +657,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_notifications(self, db, blackboard, skCase):
         db_conn, db_path = db_functions.create_db_conn(self, db)
+        self.process_recovery(db_path, db)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         notifications = db_functions.execute_query(self, NOTIFICATIONS_QUERY, db_conn, db.getName())
@@ -708,6 +686,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     
     def process_calling(self, db, blackboard, skCase, attach_query, username):
         db_conn, db_path = db_functions.create_db_conn(self, db)
+        self.process_recovery(db_path, db)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         
@@ -751,6 +730,39 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 self.log(Level.SEVERE, str(e))
         
         db_functions.close_db_conn(self, db_conn, db_path)
+
+    def process_recovery(self, db_path, file):
+        self.log(Level.INFO, "Starting recovery...")
+        if PlatformUtil.isWindowsOS():                
+            try:
+                with open(self.temp_dir + '\\freespace.txt','w') as f:
+                    subprocess.Popen([self.path_to_undark,'-i', db_path, '--freespace'],stdout=f).communicate()
+                with open(self.temp_dir + '\\freespace.txt','r') as f:
+                    # self.log(Level.INFO, ' '.join([self.path_to_undark,'-i', dbPath, '--freespace >']))
+                    # self.log(Level.INFO, "Called undark")
+                    line = f.readline()
+                    while line:
+                        # self.log(Level.INFO, "opened result")
+                        art = file.newArtifact(self.art_freespace.getTypeID())
+                        art.addAttribute(BlackboardAttribute(self.att_rec_row, YourPhoneIngestModuleFactory.moduleName, str(line)))
+                        self.index_artifact(blackboard, art,self.art_freespace)
+                        line = f.readline()
+            except Exception as e:
+                self.log(Level.SEVERE, str(e))
+                pass
+        try:
+            mdg = mdgMod.mdg_modified.sqlite_rec(db_path)
+            res = mdg.extract_deleted()
+            for line in res:
+                art = file.newArtifact(self.art_dp.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_dp_type, YourPhoneIngestModuleFactory.moduleName, str(line[0])))
+                art.addAttribute(BlackboardAttribute(self.att_dp_offset, YourPhoneIngestModuleFactory.moduleName, str(line[1])))
+                art.addAttribute(BlackboardAttribute(self.att_dp_length, YourPhoneIngestModuleFactory.moduleName, str(line[2])))
+                art.addAttribute(BlackboardAttribute(self.att_dp_data, YourPhoneIngestModuleFactory.moduleName, str(line[3])))
+                self.index_artifact(blackboard, art,self.art_dp)                 
+        except Exception as e:
+            self.log(Level.SEVERE, str(e))
+            pass
 
 class Notification(object):
     def __init__(self, j):

@@ -48,7 +48,7 @@ __description__ = ('This scripts processes SQLite '
 'to the main database.')
 
 
-def crawl(wal_file, output_dir, filename, **kwargs):
+def crawl(wal_file, **kwargs):
 	"""
 	The main function parses the header of the input file and
 	identifies the WAL file. It then splits the file into the
@@ -122,8 +122,8 @@ def crawl(wal_file, output_dir, filename, **kwargs):
 		##if kwargs['m'] or kwargs['r']:
 		##	regular_search(wal_attributes, kwargs)
 
-		# Write WAL data to CSV file.
-		csv_writer(wal_attributes, output_dir, filename)
+		# Write WAL data to list.
+		return data_to_list(wal_attributes)
 
 
 def frame_parser(wal_dict, x, frame):
@@ -363,8 +363,11 @@ def type_helper(types, data):
 
 	return cell_data
 
+def get_headers():
+	return ['Frame', 'Salt-1', 'Salt-2', 'Frame Offset', 'Cell', 'Cell Offset', 'ROWID', 'Data']
 
-def csv_writer(data, output_dir, filename):
+
+def data_to_list(data):
 	"""
 	The csv_writer function writes frame, cell, and data to a CSV
 	output file.
@@ -372,49 +375,39 @@ def csv_writer(data, output_dir, filename):
 	:param output_dir: The directory to write the CSV report to.
 	:return: Nothing.
 	"""
-	headers = ['Frame', 'Salt-1', 'Salt-2', 'Frame Offset',
-	'Cell', 'Cell Offset', 'ROWID', 'Data']
-
-	out_file = os.path.join(output_dir, filename)
+	headers = get_headers()
 	
-	csvfile = open(out_file, "wb")
-		
-	with csvfile:
-		writer = csv.writer(csvfile)
-		writer.writerow(headers)
+	all_values = []
+	for frame in data['frames']:
 
-		for frame in data['frames']:
+		for cell in data['frames'][frame]['cells']:
 
-			for cell in data['frames'][frame]['cells']:
+			# Only write entries for cells that have data.
+			if ('data' in data['frames'][frame]['cells'][cell].keys() and
+			len(data['frames'][frame]['cells'][cell]['data']) > 0):
+				# Convert relative frame and cell offsets to
+				# file offsets.
+				frame_offset = 32 + (
+				frame * data['header']['pagesize']) + (
+				frame * 24)
+				cell_offset = frame_offset + 24 + data['frames'][frame]['cells'][cell]['offset']
 
-				# Only write entries for cells that have data.
-				if ('data' in data['frames'][frame]['cells'][cell].keys() and
-				len(data['frames'][frame]['cells'][cell]['data']) > 0):
-					# Convert relative frame and cell offsets to
-					# file offsets.
-					frame_offset = 32 + (
-					frame * data['header']['pagesize']) + (
-					frame * 24)
-					cell_offset = frame_offset + 24 + data['frames'][frame]['cells'][cell]['offset']
-
-					# Cell identifiers include the frame #, 
-					# salt-1, salt-2, frame offset,
-					# cell #, cell offset, and cell rowID.
-					cell_identifiers = [frame, data['frames'][frame]['header']['salt1'],
-										data['frames'][frame]['header']['salt2'],
-										frame_offset, cell, cell_offset,
-										data['frames'][frame]['cells'][cell]['rowid']]
-
-					# Write the cell_identifiers and actual data
-					# within the cell
-					writer.writerow(
-					cell_identifiers + data['frames'][frame]['cells'][cell]['data'])
-
-				else:
-					continue
-
-		csvfile.flush()
-		csvfile.close()
+				# Cell identifiers include the frame #, 
+				# salt-1, salt-2, frame offset,
+				# cell #, cell offset, and cell rowID.
+				all_values.append({
+					headers[0]: frame, 
+					headers[1]: data['frames'][frame]['header']['salt1'],
+					headers[2]: data['frames'][frame]['header']['salt2'], 
+					headers[3]: frame_offset, 
+					headers[4]: cell, 
+					headers[5]: cell_offset,
+					headers[6]: data['frames'][frame]['cells'][cell]['rowid'],
+					headers[7]: data['frames'][frame]['cells'][cell]['data']
+					})
+			else:
+				continue
+	return all_values
 
 
 def regular_search(data, options):

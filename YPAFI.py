@@ -300,6 +300,11 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_start_time = self.create_attribute_type('YPA_START_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Start time", blackboard)
         self.att_is_read = self.create_attribute_type('YPA_IS_READ', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Is read", blackboard)
 
+        self.att_list_headers = {}
+        for header in wal_crawler.get_headers():
+            normalized_header_att_id = header.replace(' ', '_').replace('-', '_')
+            self.att_list_headers[header] = self.create_attribute_type('YPA_' + normalized_header_att_id, BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, header, blackboard)
+            
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
     # See: http://www.sleuthkit.org/sleuthkit/docs/jni-docs/interfaceorg_1_1sleuthkit_1_1datamodel_1_1_content.html
@@ -338,6 +343,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + guid + "_" + username, "User " + username + " - Phone settings", blackboard)
                     self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + guid + "_" + username, "User " + username + " - Notifications", blackboard)
                     self.art_call = self.create_artifact_type("YPA_CALLING_" + guid + "_" + username, "User " + username + " - Call history", blackboard)
+                    self.art_wal_crawl = self.create_artifact_type("YPA_WAL_CRAWL_" + guid + "_" + username, "User " + username + " - WAL Crawled", blackboard)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
@@ -348,19 +354,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
                 # Other YP databases
                 dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
-                
-                wal_files = fileManager.findFiles(dataSource, "%.db-wal", file.getParentPath())
-                for wal_file in wal_files:
-                    try:
-                        self.log(Level.INFO, "Crawling " + wal_file.getName())
-                        wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
-                        ContentUtils.writeToFile(wal_file, File(wal_path))
-                        wal_crawler.crawl(wal_path, self.temp_dir, wal_file.getName() + '.csv')
-                        self.log(Level.INFO, "Successfully crawled for " + wal_file.getName())
-                    except Exception as e:
-                        self.log(Level.INFO, "Failed to crawl for " + wal_file.getName())
-                        self.log(Level.SEVERE, str(e))
-                
+
+                # TODO: Extract method
+                self.process_wal_files(file, fileManager, dataSource, blackboard)
+
                 # dbs = [item for item in dbs if "phone.db" not in item.getName()]
                 # Jython does not support Stream predicates... :'( Ugly code follows
                 has_contacts_db = False
@@ -773,10 +770,31 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 art.addAttribute(BlackboardAttribute(self.att_dp_offset, YourPhoneIngestModuleFactory.moduleName, str(line[1])))
                 art.addAttribute(BlackboardAttribute(self.att_dp_length, YourPhoneIngestModuleFactory.moduleName, str(line[2])))
                 art.addAttribute(BlackboardAttribute(self.att_dp_data, YourPhoneIngestModuleFactory.moduleName, str(line[3])))
-                self.index_artifact(blackboard, art,self.art_dp)                 
+                self.index_artifact(blackboard, art,self.art_dp)
         except Exception as e:
             self.log(Level.SEVERE, str(e))
             pass
+
+    def process_wal_files(self, file, file_manager, data_source, blackboard):
+        wal_files = file_manager.findFiles(data_source, "%.db-wal", file.getParentPath())
+        for wal_file in wal_files:
+            try:
+                self.log(Level.INFO, "Crawling " + wal_file.getName())
+                wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
+                ContentUtils.writeToFile(wal_file, File(wal_path))
+                wal_matrix = wal_crawler.crawl(wal_path)
+                self.log(Level.INFO, "Successfully crawled for " + wal_file.getName())
+                
+                for wal_row in wal_matrix:
+                    art = wal_file.newArtifact(self.art_wal_crawl.getTypeID())
+                    for header in wal_crawler.get_headers():
+                        art.addAttribute(BlackboardAttribute(self.att_list_headers[header], YourPhoneIngestModuleFactory.moduleName, str(wal_row[header])))
+                    
+                    self.index_artifact(blackboard, art, self.art_wal_crawl)
+
+            except Exception as e:
+                self.log(Level.INFO, "Failed to crawl for " + wal_file.getName())
+                self.log(Level.SEVERE, str(e))
 
 class Notification(object):
     def __init__(self, j):

@@ -37,7 +37,8 @@ HTML_COLLAPSE_PREFIX = "#" + COLLAPSE_PREFIX
 MODAL_PREFIX = "modal"
 HTML_MODAL_PREFIX = "#" + MODAL_PREFIX
 CONVERSATION_PREFIX = "chat"
-SELF_MESSAGE_DEFAULT = "n/a (Self)"
+NOT_AVAILABLE = "n/a"
+SELF_MESSAGE_DEFAULT = NOT_AVAILABLE + " (Self)"
 SELF_USER = "Self"
 NUM_ARTIFACTS_PROGRESS = 10
 
@@ -258,10 +259,14 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         html_body = html_file.select("#page-content-wrapper")[0]
         html_body.append(div_modal)
 
-    def add_total_msgs_to_chat(self, html_file, thread_id, num_msgs, timestamp):
+    def add_total_msgs_to_chat(self, html_file, thread_id, num_msgs, timestamp, display_name):
         conversation = html_file.select("#" + CONVERSATION_PREFIX + thread_id)[0]
         i_total_messages = html_file.new_tag("i")
-        i_total_messages.string = " - " + str(num_msgs) + " messages"
+        if num_msgs == 1:
+            str_messages = " message"
+        else:
+            str_messages = " messages"
+        i_total_messages.string = " " + display_name + " - " + str(num_msgs) + str_messages
 
         span_time = html_file.new_tag("span")
         span_time['class'] = "time-left"
@@ -286,13 +291,27 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         for attribute in list_att:
             td = html_file.new_tag("td")
 
+            # Rules that apply to certain attributes
+            if attribute == "Incoming":
+                self.add_icon_to_parent(html_file, td, "call_received")
+            if attribute == "Outgoing":
+                self.add_icon_to_parent(html_file, td, "call_made")
+            if attribute == "Missed":
+                self.add_icon_to_parent(html_file, td, "call_missed")
+
             if attribute == "1970-01-01T00:00:00Z":
                 td.string = "---"
             else:
-                td.string = attribute
+                td.append(attribute)
 
             tr.append(td)
         return tr
+    
+    def add_icon_to_parent(self, html_file, parent, icon_id):
+        icon = html_file.new_tag("i")
+        icon['class'] = "material-icons"
+        icon.string = icon_id
+        parent.append(icon)
 
     def add_to_address_book(self, html_file, contact_id, list_att, username):
         tr_address = self.create_tr_for_table(html_file, username, contact_id, list_att)
@@ -318,7 +337,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         img['alt'] = "No image available"
         td.append(img)
         tr_photo.append(td)
-
 
         img['data-toggle'] = "modal"
         img['data-target'] = HTML_MODAL_PREFIX + media_id + username
@@ -502,7 +520,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             address = artifact.getAttribute(att_address).getDisplayString()
             id_for_contact = address + guid
             att_list = [address, artifact.getAttribute(att_display_name).getDisplayString(), artifact.getAttribute(att_address_type).getDisplayString(), \
-                artifact.getAttribute(att_times_contacted).getDisplayString(), self.unix_to_date_string(artifact.getAttribute(att_last_contacted).getValueLong()), \
+                artifact.getAttribute(att_times_contacted).getDisplayString(), \
+                # self.unix_to_date_string(artifact.getAttribute(att_last_contacted).getValueLong()), (disabled last_contacted - add to HTML if added back)
                 self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong())]
             self.add_contact_modal(html_ypa, artifact, id_for_contact, username)
             # self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
@@ -527,18 +546,20 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             timestamp = self.unix_to_date_string(timestamp_unix)
             if not dict_thread_ids.get(thread_id):
                 # Create Chat
-                dict_thread_ids[thread_id] = [1, timestamp]
+                dict_thread_ids[thread_id] = [1, timestamp, display_name]
                 self.add_chat_to_html_report(html_ypa, chat_name, thread_id, username)
             else:
                 dict_thread_ids[thread_id][0] += 1
                 dict_thread_ids[thread_id][1] = timestamp
+                if dict_thread_ids[thread_id][2] == NOT_AVAILABLE:
+                    dict_thread_ids[thread_id][2] = display_name
 
             self.add_msg_to_html_report(html_ypa, thread_id, body, timestamp, sender, address, username, guid)
 
             art_count = self.increment_progress_bar(progressBar, art_count)
 
         for (t_id, t_list) in dict_thread_ids.iteritems():
-            self.add_total_msgs_to_chat(html_ypa, t_id, t_list[0], t_list[1])
+            self.add_total_msgs_to_chat(html_ypa, t_id, t_list[0], t_list[1], t_list[2])
 
         for artifact in art_list_calls:
             username = artifact.getArtifactTypeName().split('_')[-1]
@@ -562,7 +583,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             media_id = artifact.getAttribute(att_media_id).getValueString()
             name = artifact.getAttribute(att_display_name).getValueString()
             last_updated = self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong())
-            size = str(artifact.getAttribute(att_pic_size).getValueLong())
+            size = str(artifact.getAttribute(att_pic_size).getValueLong() / 1024)
             uri = artifact.getAttribute(att_uri).getValueString()
             taken_time = self.unix_to_date_string(artifact.getAttribute(att_taken_time).getValueLong())
             orientation = artifact.getAttribute(att_orientation).getValueString()

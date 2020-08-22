@@ -71,6 +71,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def getRelativeFilePathCallHistory(self):
         return "YPA_CallHistory_" + Case.getCurrentCase().getName() + ".html"
     
+    def getRelativeFilePathPhoneApps(self):
+        return "YPA_PhoneApps_" + Case.getCurrentCase().getName() + ".html"
+    
     def get_file_by_artifact(self, skCase, artifact):
         return skCase.getAbstractFileById(artifact.getObjectID())
 
@@ -282,11 +285,13 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         td_user.string = username
 
         tr.append(td_user)
-        th_id = html_file.new_tag("th")
-        th_id['scope'] = "row"
-        th_id.string = id
 
-        tr.append(th_id)
+        if id is not None:
+            th_id = html_file.new_tag("th")
+            th_id['scope'] = "row"
+            th_id.string = id
+
+            tr.append(th_id)
 
         for attribute in list_att:
             td = html_file.new_tag("td")
@@ -324,6 +329,21 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         call_history = html_file.select("#call-history-table")[0]
         call_history.append(tr_call)
+    
+    def add_to_phone_apps(self, html_file, att_list, play_store_link, username):
+        tr_app = self.create_tr_for_table(html_file, username, None, att_list)
+
+        # Add play store link
+        td_link = html_file.new_tag("td")
+        a_link = html_file.new_tag("a")
+        a_link['href'] = play_store_link
+        a_link.string = "Link"
+
+        td_link.append(a_link)
+        tr_app.append(td_link)
+
+        phone_apps = html_file.select("#phone-apps-table")[0]
+        phone_apps.append(tr_app)
     
     def add_to_photos(self, html_file, username, photo_id, media_id, path, list_att):
         tr_photo = self.create_tr_for_table(html_file, username, photo_id, list_att)
@@ -410,9 +430,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         art_list_contacts = skCase.getMatchingArtifacts(base_query + "'YPA_CONTACTS_%'")
         art_list_photos = skCase.getMatchingArtifacts(base_query + "'YPA_PHOTO_%'")
         art_list_calls = skCase.getMatchingArtifacts(base_query + "'YPA_CALLING_%'")
-        total_artifact_count = len(art_list_messages) + len(art_list_contacts) + len(art_list_photos) + len(art_list_calls)
-
-
+        art_list_phone_apps = skCase.getMatchingArtifacts(base_query + "'YPA_PHONE_APP_%'")
+        total_artifact_count = len(art_list_messages) + len(art_list_contacts) + len(art_list_photos) + len(art_list_calls) + len(art_list_phone_apps)
 
         if total_artifact_count == 0:
             msg = "There seem to be no YPA artifacts. Did you run the ingest module? Please cancel this report and try again after the ingest module."
@@ -451,6 +470,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         # Get template path
         template_name_call_history = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_call_history.html")
 
+        # Get html_file_name
+        html_file_name_phone_apps = os.path.join(baseReportDir, self.getRelativeFilePathPhoneApps())
+        # Get template path
+        template_name_phone_apps = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_phone_apps.html")
+
         with open(template_name_chats) as base_dir:
             txt = base_dir.read()
             html_ypa = bs4.BeautifulSoup(txt)
@@ -466,19 +490,31 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         with open(template_name_call_history) as base_dir:
             txt = base_dir.read()
             html_ypa_call_history = bs4.BeautifulSoup(txt)
+        
+        with open(template_name_phone_apps) as base_dir:
+            txt = base_dir.read()
+            html_ypa_phone_apps = bs4.BeautifulSoup(txt)
 
         self.add_link_to_html_report(html_ypa, "#address-book", self.getRelativeFilePathAddressBook())
         self.add_link_to_html_report(html_ypa, "#photos", self.getRelativeFilePathPhotos())
         self.add_link_to_html_report(html_ypa, "#call-history", self.getRelativeFilePathCallHistory())
+        self.add_link_to_html_report(html_ypa, "#phone-apps", self.getRelativeFilePathPhoneApps())
         self.add_link_to_html_report(html_ypa_book, "#conversations", self.getRelativeFilePath())
         self.add_link_to_html_report(html_ypa_book, "#photos", self.getRelativeFilePathPhotos())
         self.add_link_to_html_report(html_ypa_book, "#call-history", self.getRelativeFilePathCallHistory())
+        self.add_link_to_html_report(html_ypa_book, "#phone-apps", self.getRelativeFilePathPhoneApps())
         self.add_link_to_html_report(html_ypa_photos, "#conversations", self.getRelativeFilePath())
         self.add_link_to_html_report(html_ypa_photos, "#address-book", self.getRelativeFilePathAddressBook())
         self.add_link_to_html_report(html_ypa_photos, "#call-history", self.getRelativeFilePathCallHistory())
+        self.add_link_to_html_report(html_ypa_photos, "#phone-apps", self.getRelativeFilePathPhoneApps())
         self.add_link_to_html_report(html_ypa_call_history, "#conversations", self.getRelativeFilePath())
         self.add_link_to_html_report(html_ypa_call_history, "#address-book", self.getRelativeFilePathAddressBook())
         self.add_link_to_html_report(html_ypa_call_history, "#photos", self.getRelativeFilePathPhotos())
+        self.add_link_to_html_report(html_ypa_call_history, "#phone-apps", self.getRelativeFilePathPhoneApps())
+        self.add_link_to_html_report(html_ypa_phone_apps, "#conversations", self.getRelativeFilePath())
+        self.add_link_to_html_report(html_ypa_phone_apps, "#address-book", self.getRelativeFilePathAddressBook())
+        self.add_link_to_html_report(html_ypa_phone_apps, "#photos", self.getRelativeFilePathPhotos())
+        self.add_link_to_html_report(html_ypa_phone_apps, "#call-history", self.getRelativeFilePathCallHistory())
         
         # Get Attribute types
         att_thread_id = skCase.getAttributeType("YPA_THREAD_ID")
@@ -510,6 +546,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         att_call_type = skCase.getAttributeType("YPA_CALL_TYPE")
         att_start_time = skCase.getAttributeType("YPA_START_TIME")
         att_is_read = skCase.getAttributeType("YPA_IS_READ")
+
+        att_package_name = skCase.getAttributeType("YPA_APP_PACKAGE_NAME")
+        att_version = skCase.getAttributeType("YPA_APP_VERSION")
 
         art_count = 0
         attribute_type = self.configPanel.getAttTypeList()[self.configPanel.getSelectedAddressBookOrderIndex()]
@@ -571,6 +610,15 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 artifact.getAttribute(att_call_type).getValueString(), call_start_time, \
                 last_updated, artifact.getAttribute(att_is_read).getValueString()]
             self.add_to_call_history(html_ypa_call_history, call_id, att_list, username)
+            
+        for artifact in art_list_phone_apps:
+            username = artifact.getArtifactTypeName().split('_')[-1]
+            app_name = artifact.getAttribute(att_display_name).getValueString()
+            package_name = artifact.getAttribute(att_package_name).getValueString()
+            app_version = artifact.getAttribute(att_version).getValueString()
+            play_store_link = "https://play.google.com/store/apps/details?id=" + package_name
+            att_list = [app_name, package_name, app_version]
+            self.add_to_phone_apps(html_ypa_phone_apps, att_list, play_store_link, username)
 
         progressBar.updateStatusLabel("Generating photos from BLOBs")
 
@@ -644,6 +692,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         with open(html_file_name_call_history, "w") as outf:
             outf.write(str(html_ypa_call_history))
         
+        with open(html_file_name_phone_apps, "w") as outf:
+            outf.write(str(html_ypa_phone_apps))
+        
         Case.getCurrentCase().addReport(html_file_name, self.moduleName, "YPA Report")
 
         # Elapsed time
@@ -651,7 +702,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         self.log(Level.INFO, "YPA Report module took " + str(elapsed_time) + "s")
 
-        # Call this with ERROR if report was not generated
         progressBar.complete(ReportStatus.COMPLETE)
 
     def getConfigurationPanel(self):

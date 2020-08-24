@@ -796,11 +796,13 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     
     def wal_2lite(self, b2lite, wal_file, wal_path, blackboard):
         try:
+            ### TODO: This is not very well implemented...
             self.log(Level.INFO, "Bringing 2 lite " + wal_file.getName())
             b2lite.wals.append(os.path.abspath(wal_path))
             wal_data = b2lite.process()
             self.log(Level.INFO, "Successfully brought 2 lite " + wal_file.getName())
             # self.log(Level.INFO, str(wal_data))
+            ### TODO: This is not very well implemented...
             if wal_data:
                 for wal_frame in wal_data:
                     for key, frame in wal_frame['wal'].iteritems():

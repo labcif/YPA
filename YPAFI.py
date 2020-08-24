@@ -56,6 +56,7 @@ from org.sleuthkit.datamodel import Account
 
 from db import db_functions
 from crawler import wal_crawler
+from bring2lite import main as b2l
 
 # DB queries
 CONTACT_QUERY = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, (a.last_contacted_time / 10000000 - 11644473600) as last_contacted_time,  (c.last_updated_time/ 10000000 - 11644473600) as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
@@ -354,7 +355,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 # Other YP databases
                 dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
 
-                # TODO: Extract method
                 self.process_wal_files(file, fileManager, dataSource, blackboard)
 
                 # dbs = [item for item in dbs if "phone.db" not in item.getName()]
@@ -776,24 +776,47 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_wal_files(self, file, file_manager, data_source, blackboard):
         wal_files = file_manager.findFiles(data_source, "%.db-wal", file.getParentPath())
+        wal_paths = []
         for wal_file in wal_files:
-            try:
-                self.log(Level.INFO, "Crawling " + wal_file.getName())
-                wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
-                ContentUtils.writeToFile(wal_file, File(wal_path))
-                wal_matrix = wal_crawler.crawl(wal_path)
-                self.log(Level.INFO, "Successfully crawled for " + wal_file.getName())
-                
-                for wal_row in wal_matrix:
-                    art = wal_file.newArtifact(self.art_wal_crawl.getTypeID())
-                    for header in wal_crawler.get_headers():
-                        art.addAttribute(BlackboardAttribute(self.att_list_headers[header], YourPhoneIngestModuleFactory.moduleName, str(wal_row[header])))
-                    
-                    self.index_artifact(blackboard, art, self.art_wal_crawl)
+            wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
+            wal_paths.append(wal_path)
+            ContentUtils.writeToFile(wal_file, File(wal_path))
+            self.wal_crawl(wal_file, wal_path, blackboard)
+        self.wal_2lite(wal_files, wal_paths, blackboard)
 
-            except Exception as e:
-                self.log(Level.INFO, "Failed to crawl for " + wal_file.getName())
-                self.log(Level.SEVERE, str(e))
+    def wal_2lite(self, wal_files, wal_paths, blackboard):
+        try:
+            self.log(Level.INFO, "Starting to add WALs to bring2lite")
+            b2lite = b2l.main(self.temp_dir)
+            b2lite.output = os.path.abspath(self.temp_dir)
+            for wal_path in wal_paths:
+                self.log(Level.INFO, "Appending a WAL")
+                b2lite.wals.append(os.path.abspath(wal_path))
+            
+            self.log(Level.INFO, "Starting to bring2lite")
+            wal_data = b2lite.process()
+            self.log(Level.INFO, "Finished processing bring2lite")
+            self.log(Level.INFO, str(wal_data))
+        except Exception as e:
+            self.log(Level.INFO, "Failed to bring2lite")
+            self.log(Level.SEVERE, str(e))
+    
+    def wal_crawl(self, wal_file, wal_path, blackboard):
+        try:
+            self.log(Level.INFO, "Crawling " + wal_file.getName())
+            wal_matrix = wal_crawler.crawl(wal_path)
+            self.log(Level.INFO, "Successfully crawled for " + wal_file.getName())
+            
+            for wal_row in wal_matrix:
+                art = wal_file.newArtifact(self.art_wal_crawl.getTypeID())
+                for header in wal_crawler.get_headers():
+                    art.addAttribute(BlackboardAttribute(self.att_list_headers[header], YourPhoneIngestModuleFactory.moduleName, str(wal_row[header])))
+                
+                self.index_artifact(blackboard, art, self.art_wal_crawl)
+
+        except Exception as e:
+            self.log(Level.INFO, "Failed to crawl for " + wal_file.getName())
+            self.log(Level.SEVERE, str(e))
 
 class Notification(object):
     def __init__(self, j):

@@ -300,10 +300,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.att_start_time = self.create_attribute_type('YPA_START_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Start time", blackboard)
         self.att_is_read = self.create_attribute_type('YPA_IS_READ', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Is read", blackboard)
 
+        # WAL crawler attribute
         self.att_list_headers = {}
         for header in wal_crawler.get_headers():
             normalized_header_att_id = header.replace(' ', '_').replace('-', '_')
             self.att_list_headers[header] = self.create_attribute_type('YPA_' + normalized_header_att_id, BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, header, blackboard)
+        
+        # bring2lite attributes
+        self.att_b2l_row = self.create_attribute_type('YPA_WAL_B2L_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Row content", blackboard)
             
     # Where the analysis is done.
     # The 'dataSource' object being passed in is of type org.sleuthkit.datamodel.Content.
@@ -344,6 +348,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + guid + "_" + username, "User " + username + " - Notifications", blackboard)
                     self.art_call = self.create_artifact_type("YPA_CALLING_" + guid + "_" + username, "User " + username + " - Call history", blackboard)
                     self.art_wal_crawl = self.create_artifact_type("YPA_WAL_CRAWL_" + guid + "_" + username, "User " + username + " - WAL Crawled", blackboard)
+                    self.art_wal_b2l = self.create_artifact_type("YPA_WAL_B2L_" + guid + "_" + username, "User " + username + " - WAL bring2lite", blackboard)
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
@@ -776,29 +781,47 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_wal_files(self, file, file_manager, data_source, blackboard):
         wal_files = file_manager.findFiles(data_source, "%.db-wal", file.getParentPath())
-        wal_paths = []
+        
+        # b2l instance
+        b2lite = b2l.main(self.temp_dir)
+        b2lite.output = os.path.abspath(self.temp_dir)
         for wal_file in wal_files:
             wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
-            wal_paths.append(wal_path)
             ContentUtils.writeToFile(wal_file, File(wal_path))
             self.wal_crawl(wal_file, wal_path, blackboard)
-        self.wal_2lite(wal_files, wal_paths, blackboard)
+            self.wal_2lite(b2lite, wal_file, wal_path, blackboard)
 
-    def wal_2lite(self, wal_files, wal_paths, blackboard):
+    def is_text(self, tester):
+        return tester == 'TEXT'
+    
+    def wal_2lite(self, b2lite, wal_file, wal_path, blackboard):
         try:
-            self.log(Level.INFO, "Starting to add WALs to bring2lite")
-            b2lite = b2l.main(self.temp_dir)
-            b2lite.output = os.path.abspath(self.temp_dir)
-            for wal_path in wal_paths:
-                self.log(Level.INFO, "Appending a WAL")
-                b2lite.wals.append(os.path.abspath(wal_path))
-            
-            self.log(Level.INFO, "Starting to bring2lite")
+            self.log(Level.INFO, "Bringing 2 lite " + wal_file.getName())
+            b2lite.wals.append(os.path.abspath(wal_path))
             wal_data = b2lite.process()
-            self.log(Level.INFO, "Finished processing bring2lite")
-            self.log(Level.INFO, str(wal_data))
+            self.log(Level.INFO, "Successfully brought 2 lite " + wal_file.getName())
+            # self.log(Level.INFO, str(wal_data))
+            if wal_data:
+                for wal_frame in wal_data:
+                    for key, frame in wal_frame['wal'].iteritems():
+                        self.log(Level.INFO, "Bring 2 lite frame: " + str(frame))
+                        row = ""
+                        if isinstance(frame, list):
+                            for y in frame:
+                                if self.is_text(y[0]):
+                                    try:
+                                        row += str(y[1].decode('utf-8')) + ","
+                                    except UnicodeDecodeError:
+                                        row +=str(y[1]) + ","
+                                        continue
+                                else:
+                                    row += str(y[1]) + ","
+                        art = wal_file.newArtifact(self.art_wal_b2l.getTypeID())
+                        art.addAttribute(BlackboardAttribute(self.att_b2l_row, YourPhoneIngestModuleFactory.moduleName, row))
+                        self.log(Level.INFO, "bring2lite row data: " + row)
+                        self.index_artifact(blackboard, art, self.art_wal_b2l)
         except Exception as e:
-            self.log(Level.INFO, "Failed to bring2lite")
+            self.log(Level.INFO, "Failed to bring 2 lite " + wal_file.getName())
             self.log(Level.SEVERE, str(e))
     
     def wal_crawl(self, wal_file, wal_path, blackboard):

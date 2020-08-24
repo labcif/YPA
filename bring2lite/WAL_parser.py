@@ -76,7 +76,7 @@ class WALParser(Parser):
                 result = super(WALParser, self)._parse_page(p, is_wal=True)
                 if not isinstance(result, int):
                     d["wal"][i] = result
-                    self.logger.debug("WAL result: " + str(result))
+                    # self.logger.debug("WAL result: " + str(result))
                     # self.rgen.generateReport(os.path.abspath(self.outname + "/" + super(WALParser, self)._path_leaf(self.filename) + "/WALs/" + "/"),
                     #                              str(i) + "-wal-frame", result)
 

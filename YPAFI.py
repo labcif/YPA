@@ -796,7 +796,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     
     def wal_2lite(self, b2lite, wal_file, wal_path, blackboard):
         try:
-            ### TODO: This is not very well implemented...
             self.log(Level.INFO, "Bringing 2 lite " + wal_file.getName())
             b2lite.wals.append(os.path.abspath(wal_path))
             wal_data = b2lite.process()

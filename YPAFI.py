@@ -801,26 +801,27 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             wal_data = b2lite.process()
             self.log(Level.INFO, "Successfully brought 2 lite " + wal_file.getName())
             # self.log(Level.INFO, str(wal_data))
-            ### TODO: This is not very well implemented...
+            # Yes, there's a lot of loops here. bring2lite does a lot of lists with lists
             if wal_data:
                 for wal_frame in wal_data:
-                    for key, frame in wal_frame['wal'].iteritems():
-                        self.log(Level.INFO, "Bring 2 lite frame: " + str(frame))
-                        row = ""
-                        if isinstance(frame, list):
-                            for y in frame:
-                                if self.is_text(y[0]):
-                                    try:
-                                        row += str(y[1].decode('utf-8')) + ","
-                                    except UnicodeDecodeError:
-                                        row +=str(y[1]) + ","
-                                        continue
-                                else:
-                                    row += str(y[1]) + ","
-                        art = wal_file.newArtifact(self.art_wal_b2l.getTypeID())
-                        art.addAttribute(BlackboardAttribute(self.att_b2l_row, YourPhoneIngestModuleFactory.moduleName, row))
-                        self.log(Level.INFO, "bring2lite row data: " + row)
-                        self.index_artifact(blackboard, art, self.art_wal_b2l)
+                    for key, outer_frame in wal_frame['wal'].iteritems():
+                        self.log(Level.INFO, "Bring 2 lite frame: " + str(outer_frame))
+                        for frame in outer_frame:
+                            if isinstance(frame, list):
+                                row = ""
+                                for y in frame:
+                                    if self.is_text(y[0]):
+                                        try:
+                                            row += str(y[1].decode('utf-8')) + ","
+                                        except UnicodeEncodeError:
+                                            row +=str(y[1]) + ","
+                                            continue
+                                    else:
+                                        row += str(y[1]) + ","
+                                art = wal_file.newArtifact(self.art_wal_b2l.getTypeID())
+                                art.addAttribute(BlackboardAttribute(self.att_b2l_row, YourPhoneIngestModuleFactory.moduleName, row))
+                                self.log(Level.INFO, "bring2lite row data: " + row)
+                                self.index_artifact(blackboard, art, self.art_wal_b2l)
         except Exception as e:
             self.log(Level.INFO, "Failed to bring 2 lite " + wal_file.getName())
             self.log(Level.SEVERE, str(e))

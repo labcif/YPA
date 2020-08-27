@@ -9,6 +9,7 @@ from math import ceil
 from java.lang import System
 from java.util import Date, TimeZone
 from java.text import SimpleDateFormat
+from java.sql import SQLException
 from java.util.logging import Level
 from org.sleuthkit.autopsy.casemodule import Case
 from org.sleuthkit.autopsy.casemodule.services import Services
@@ -41,6 +42,12 @@ NOT_AVAILABLE = "n/a"
 SELF_MESSAGE_DEFAULT = NOT_AVAILABLE + " (Self)"
 SELF_USER = "Self"
 NUM_ARTIFACTS_PROGRESS = 10
+IMAGE_EXTENSION = ".jpg"
+PHOTO_MEDIA_QUERY = "SELECT m.thumbnail, media, m.id \
+                FROM media m \
+                LEFT JOIN photo p on m.name = p.name \
+                WHERE id = "
+CONTACT_THUMBNAIL_QUERY = "SELECT thumbnail, contact_id FROM contact WHERE contact_id = "\
 
 class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
@@ -318,8 +325,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         icon.string = icon_id
         parent.append(icon)
 
-    def add_to_address_book(self, html_file, contact_id, list_att, username):
+    def add_to_address_book(self, html_file, contact_id, list_att, username, thumbnail_path):
         tr_address = self.create_tr_for_table(html_file, username, contact_id, list_att)
+
+        self.add_photo_to_parent(html_file, tr_address, thumbnail_path)
 
         address_book = html_file.select("#address-book-table")[0]
         address_book.append(tr_address)
@@ -348,16 +357,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def add_to_photos(self, html_file, username, photo_id, media_id, path, list_att):
         tr_photo = self.create_tr_for_table(html_file, username, photo_id, list_att)
 
-        td = html_file.new_tag("td")
-        img = html_file.new_tag("img")
-        img['src'] = path
-        # img['width'] = "200"
-        # img['height'] = "200"
-        img['class'] = "img-fluid img-thumbnail"
-        img['alt'] = "No image available"
-        td.append(img)
-        tr_photo.append(td)
-
+        img = self.add_photo_to_parent(html_file, tr_photo, path)
+        
         img['data-toggle'] = "modal"
         img['data-target'] = HTML_MODAL_PREFIX + media_id + username
 
@@ -398,12 +399,63 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         except Exception as e:
             self.log(Level.SEVERE, "Error saving photo: " + str(e))
         return path
+
+    def add_photo_to_parent(self, html_file, parent, photo_path):
+        td = html_file.new_tag("td")
+        img = html_file.new_tag("img")
+        img['src'] = photo_path
+        # img['width'] = "200"
+        # img['height'] = "200"
+        img['class'] = "img-fluid img-thumbnail"
+        img['alt'] = "No image available"
+        td.append(img)
+        parent.append(td)
+        return img
     
     def unix_to_date_string(self, unix):
         date = Date(unix * 1000)
         df = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX")
         df.setTimeZone(TimeZone.getTimeZone("UTC"))
         return df.format(date)
+    
+    def get_image_bytes(self, artifact, skCase, query, name = "Undefined name"):
+        artifact_obj_id = artifact.getObjectID()
+        source_file = self.get_file_by_artifact(skCase, artifact)
+
+        if not source_file or not source_file.exists():
+            # getAbstractFileById can return null.
+            # Skip this photo in case source DB is not available.
+            self.log(Level.INFO, "No source DB for " + name)
+            return None
+        
+        # If the DB is different, close old conn and create new one
+        if self.db_conn and self.db_path and artifact_obj_id != self.last_obj_id:
+            db_functions.close_db_conn(self, self.db_conn, self.db_path)
+            self.db_conn, self.db_path = db_functions.create_db_conn(self, source_file)
+        else:
+            if not self.db_conn and not self.db_path:
+                self.db_conn, self.db_path = db_functions.create_db_conn(self, source_file)
+        
+        try:
+            self.log(Level.INFO, "Executing " + query + " for db_path " + self.db_path)
+            rs = db_functions.execute_query(self, query, self.db_conn)
+            image_bytes = None
+            if rs and not rs.isClosed():
+                rs.next()
+                try:
+                    image_bytes = rs.getBytes('media') or rs.getBytes('thumbnail')
+                except SQLException:
+                    image_bytes = rs.getBytes('thumbnail')
+            else:
+                self.log(Level.INFO, "No result or closed result for image " + name)
+
+            rs.close()
+
+            return image_bytes
+        except Exception as e:
+            self.log(Level.INFO, "WARNING: Failed to get image for " + name + " due to " + str(e))
+        finally:
+            self.last_obj_id = artifact_obj_id
     
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
     # The 'progressBar' object is of type ReportProgressPanel.
@@ -412,6 +464,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         self.log(Level.INFO, "Starting YPA report module")
 
         self.temp_dir = Case.getCurrentCase().getTempDirectory()
+        
+        self.last_obj_id = None
+        self.db_conn = None
+        self.db_path = None
         # Count execution time
         start_time = time.time()
 
@@ -558,13 +614,21 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             contact_id = artifact.getAttribute(att_contact_id).getDisplayString()
             address = artifact.getAttribute(att_address).getDisplayString()
             id_for_contact = address + guid
-            att_list = [address, artifact.getAttribute(att_display_name).getDisplayString(), artifact.getAttribute(att_address_type).getDisplayString(), \
+            display_name = artifact.getAttribute(att_display_name).getDisplayString()
+            att_list = [address, display_name, artifact.getAttribute(att_address_type).getDisplayString(), \
                 artifact.getAttribute(att_times_contacted).getDisplayString(), \
                 # self.unix_to_date_string(artifact.getAttribute(att_last_contacted).getValueLong()), (disabled last_contacted - add to HTML if added back)
                 self.unix_to_date_string(artifact.getAttribute(att_last_updated).getValueLong())]
             self.add_contact_modal(html_ypa, artifact, id_for_contact, username)
             # self.add_to_contact_book(html_ypa, display_name, id_for_contact, last_contacted)
-            self.add_to_address_book(html_ypa_book, contact_id, att_list, username)
+            
+            image_bytes = self.get_image_bytes(artifact, skCase, CONTACT_THUMBNAIL_QUERY + contact_id, display_name)
+            thumbnail_path = display_name + IMAGE_EXTENSION
+            if image_bytes:
+                self.save_photo(image_bytes, baseReportDir, thumbnail_path)
+                # self.add_photo_modal(html_ypa_photos, name, media_id, username)
+            
+            self.add_to_address_book(html_ypa_book, contact_id, att_list, username, thumbnail_path)
             art_count = self.increment_progress_bar(progressBar, art_count)
 
         dict_thread_ids = {}
@@ -622,9 +686,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         progressBar.updateStatusLabel("Generating photos from BLOBs")
 
-        last_obj_id = None
-        db_conn = None
-        db_path = None
         for artifact in art_list_photos:
             # Get artifact info
             photo_id = artifact.getAttribute(att_photo_id).getValueString()
@@ -640,43 +701,13 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             height = str(artifact.getAttribute(att_height).getValueLong())
             username = artifact.getArtifactTypeName().split('_')[-1]
             # guid = artifact.getArtifactTypeName().split('_')[-2]
-            artifact_obj_id = artifact.getObjectID()
-            source_file = self.get_file_by_artifact(skCase, artifact)
-
-            if not source_file or not source_file.exists():
-                # getAbstractFileById can return null.
-                # Skip this photo in case source DB is not available.
-                self.log(Level.INFO, "No source DB for " + name)
-                continue
             
-            # If the DB is different, close old conn and create new one
-            if db_conn and db_path and artifact_obj_id != last_obj_id:
-                db_functions.close_db_conn(self, db_conn, db_path)
-                db_conn, db_path = db_functions.create_db_conn(self, source_file)
-            else:
-                if not db_conn and not db_path:
-                    db_conn, db_path = db_functions.create_db_conn(self, source_file)
-            
-            try:
-                query = "select m.thumbnail, media, m.id \
-                    from media m \
-                    left join photo p on m.name = p.name \
-                    where id = " + media_id
-                
-                rs = db_functions.execute_query(self, query, db_conn)
-                if not rs.isClosed():
-                    rs.next()
-                    image_bytes = rs.getBytes('media') or rs.getBytes('thumbnail')
-                    if image_bytes is not None:
-                        self.save_photo(image_bytes, baseReportDir, name)
-                        self.add_photo_modal(html_ypa_photos, name, media_id, username)
-                self.add_to_photos(html_ypa_photos, username, photo_id, media_id, name, [name, last_updated, size, media_id, uri, taken_time, orientation, last_seen_time, width, height])
+            image_bytes = self.get_image_bytes(artifact, skCase, PHOTO_MEDIA_QUERY + media_id, name)
+            if image_bytes is not None:
+                self.save_photo(image_bytes, baseReportDir, name)
+                self.add_photo_modal(html_ypa_photos, name, media_id, username)
+            self.add_to_photos(html_ypa_photos, username, photo_id, media_id, name, [name, last_updated, size, media_id, uri, taken_time, orientation, last_seen_time, width, height])
 
-                rs.close()
-            except Exception as e:
-                self.log(Level.INFO, "WARNING: Failed to get image for " + name + " due to " + str(e))
-            finally:
-                last_obj_id = artifact_obj_id
 
         progressBar.updateStatusLabel("Saving report files")
 
@@ -696,6 +727,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             outf.write(str(html_ypa_phone_apps))
         
         Case.getCurrentCase().addReport(html_file_name, self.moduleName, "YPA Report")
+
+        db_functions.close_db_conn(self, self.db_conn, self.db_path)
 
         # Elapsed time
         elapsed_time = time.time() - start_time

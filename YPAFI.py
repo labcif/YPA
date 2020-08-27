@@ -22,7 +22,6 @@ from javax.swing import JComponent
 from java.awt.event import KeyListener
 from org.python.core.util import StringUtil
 from java.lang import Class, System, IllegalArgumentException
-from java.sql import DriverManager, SQLException
 from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.datamodel import SleuthkitCase
@@ -364,18 +363,18 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
                 # dbs = [item for item in dbs if "phone.db" not in item.getName()]
                 # Jython does not support Stream predicates... :'( Ugly code follows
-                has_contacts_db = False
+                contact_db = None
                 for db in dbs:
                     if "contacts.db" in db.getName():
-                        has_contacts_db = True
+                        contact_db = db
                         break
                 
-                if has_contacts_db:
+                if contact_db:
                     # We are in a new DB schema!
                     contact_db_path = os.path.join(file.getLocalPath().rsplit('\\', 1)[0], "contacts.db")
                     attach_query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB")
                     dbConn = db_functions.execute_statement(self, attach_query, dbConn, file.getName())
-                    self.processContacts(db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
+                    self.processContacts(db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName()), contact_db, blackboard, skCase)
                     self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase, username)
                     self.processMms(db_functions.execute_query(self, MMS_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
 

@@ -133,13 +133,16 @@ class GUI:
             self.list.insert(END, i)
 
 
-    def process(self):
-        self.start_processing_sqlite()
-        self.start_processing_journal()
-        wal_data = self.start_processing_wal()
-        return wal_data
+    def process_wal(self, wal_path):
+        self.wals = [os.path.abspath(wal_path)]
+        return self.start_processing_wal()
+
+    def process_sqlite(self, sqlite_path):
+        self.sqlites = [os.path.abspath(sqlite_path)]
+        return self.start_processing_sqlite()
 
     def start_processing_sqlite(self):
+        sql_data = []
         self.d = None
         if len(self.sqlites) > 0:
             tqdm.write("Processing main files")
@@ -147,11 +150,9 @@ class GUI:
             for i in tqdm(self.sqlites):
             #for i in self.sqlites:
                 self.d = self.sqlp.parse(i, self.output, self.format)
-                if self.gui_on:
-                    v = Visualizer()
-                    v.visualize(self.d)
+                sql_data.append(self.d)
 
-        self.logger.debug("end of parsing")
+        return sql_data
 
     def start_processing_wal(self):
         wal_data = []
@@ -162,7 +163,8 @@ class GUI:
             for i in tqdm(self.wals):
                 try:
                     if i[0:-4] in self.sqlites:
-                        wal_data.append(self.walp.parse(i, self.output, self.format, True))
+                        # YPA: disable parse with schemas, it seems we lose some data otherwise
+                        wal_data.append(self.walp.parse(i, self.output, self.format, False))
                     else:
                         wal_data.append(self.walp.parse(i, self.output, self.format, False))
                 except:

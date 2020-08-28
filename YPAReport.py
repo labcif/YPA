@@ -437,7 +437,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 self.db_conn, self.db_path = db_functions.create_db_conn(self, source_file)
         
         try:
-            self.log(Level.INFO, "Executing " + query + " for db_path " + self.db_path)
             rs = db_functions.execute_query(self, query, self.db_conn)
             image_bytes = None
             if rs and not rs.isClosed():

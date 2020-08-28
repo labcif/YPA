@@ -325,6 +325,13 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         for file in files:
             full_path = (file.getParentPath() + file.getName())
             dbConn, dbPath = db_functions.create_db_conn(self, file)
+
+            # b2l instance
+            b2lite = b2l.main(self.temp_dir)
+            b2lite.output = os.path.abspath(self.temp_dir)
+            
+            # TODO do for all DBs
+            self.db_2lite(b2lite, file, dbPath, blackboard)
             try:
                 split = full_path.split('/')                  
                 try:
@@ -359,7 +366,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 # Other YP databases
                 dbs = fileManager.findFiles(dataSource, "%.db", file.getParentPath())
 
-                self.process_wal_files(file, fileManager, dataSource, blackboard)
+                self.process_wal_files(file, fileManager, dataSource, blackboard, b2lite)
 
                 # dbs = [item for item in dbs if "phone.db" not in item.getName()]
                 # Jython does not support Stream predicates... :'( Ugly code follows
@@ -778,12 +785,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.log(Level.SEVERE, str(e))
             pass
 
-    def process_wal_files(self, file, file_manager, data_source, blackboard):
+    def process_wal_files(self, file, file_manager, data_source, blackboard, b2lite):
         wal_files = file_manager.findFiles(data_source, "%.db-wal", file.getParentPath())
-        
-        # b2l instance
-        b2lite = b2l.main(self.temp_dir)
-        b2lite.output = os.path.abspath(self.temp_dir)
+
         for wal_file in wal_files:
             wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
             ContentUtils.writeToFile(wal_file, File(wal_path))
@@ -792,39 +796,48 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def is_text(self, tester):
         return tester == 'TEXT'
+
+    def db_2lite(self, b2lite, db_file, db_path, blackboard):
+        try:
+            sqlite_data = b2lite.process_sqlite(db_path)
+            self.log(Level.INFO, "Successfully brought 2 lite " + db_file.getName())
+            self.log(Level.INFO, str(sqlite_data))
+        except Exception as e:
+            self.log(Level.INFO, "Failed to bring DB 2 lite " + db_file.getName())
+            self.log(Level.SEVERE, str(e))
     
     def wal_2lite(self, b2lite, wal_file, wal_path, blackboard):
         try:
-            self.log(Level.INFO, "Bringing 2 lite " + wal_file.getName())
-            b2lite.wals.append(os.path.abspath(wal_path))
-            wal_data = b2lite.process()
+            wal_data = b2lite.process_wal(wal_path)
             self.log(Level.INFO, "Successfully brought 2 lite " + wal_file.getName())
-            # self.log(Level.INFO, str(wal_data))
-            # Yes, there's a lot of loops here. bring2lite does a lot of lists with lists
+            self.log(Level.INFO, "WAL data: " + str(wal_data))
             if wal_data:
                 for wal_frame in wal_data:
                     for key, outer_frame in wal_frame['wal'].iteritems():
-                        self.log(Level.INFO, "Bring 2 lite frame: " + str(outer_frame))
-                        for frame in outer_frame:
-                            if isinstance(frame, list):
-                                row = ""
-                                for y in frame:
-                                    if self.is_text(y[0]):
-                                        try:
-                                            row += str(y[1].decode('utf-8')) + ","
-                                        except UnicodeEncodeError:
-                                            row +=str(y[1]) + ","
-                                            continue
-                                    else:
-                                        row += str(y[1]) + ","
-                                art = wal_file.newArtifact(self.art_wal_b2l.getTypeID())
-                                art.addAttribute(BlackboardAttribute(self.att_b2l_row, YourPhoneIngestModuleFactory.moduleName, row))
-                                self.log(Level.INFO, "bring2lite row data: " + row)
-                                self.index_artifact(blackboard, art, self.art_wal_b2l)
+                        self.process_b2l_row(blackboard, self.art_wal_b2l, wal_file, outer_frame)
+                        
         except Exception as e:
-            self.log(Level.INFO, "Failed to bring 2 lite " + wal_file.getName())
+            self.log(Level.INFO, "Failed to bring WAL 2 lite " + wal_file.getName())
             self.log(Level.SEVERE, str(e))
     
+    def process_b2l_row(self, blackboard, art_type, wal_file, outer_frame):
+        for frame in outer_frame:
+            if isinstance(frame, list):
+                row = ""
+                for y in frame:
+                    if self.is_text(y[0]):
+                        try:
+                            row += str(y[1].decode('utf-8')) + ","
+                        except UnicodeEncodeError:
+                            row +=str(y[1]) + ","
+                            continue
+                    else:
+                        row += str(y[1]) + ","
+                art = wal_file.newArtifact(art_type.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_b2l_row, YourPhoneIngestModuleFactory.moduleName, row))
+                self.log(Level.INFO, "bring2lite row data: " + row)
+                self.index_artifact(blackboard, art, art_type)
+
     def wal_crawl(self, wal_file, wal_path, blackboard):
         try:
             self.log(Level.INFO, "Crawling " + wal_file.getName())

@@ -93,8 +93,8 @@ class SQLiteParser(Parser):
                 self.parsed_schemas = self._extract_schemas(result)
 
             self.schema_related_pages = self._connect_schema_and_pages()
-            self.rgen.generate_schema_report(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/schemas/" + "/"),
-                                            "sql-schema", self.parsed_schemas, False)
+            # self.rgen.generate_schema_report(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/schemas/" + "/"),
+            #                                 "sql-schema", self.parsed_schemas, False)
             # self.rgen.generate_schema_report(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/schemas/" + "/"),
             #                                 "sql-schema", self.schema_related_pages, False)
             global d
@@ -124,26 +124,26 @@ class SQLiteParser(Parser):
                 result = super(SQLiteParser, self)._parse_page(one_page)
                 if not isinstance(result, int):
                     d["body"][self.current_page]["page"] = result
-                    self.rgen.generateReport(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/regular-page-parsing/" + "/"),
-                                         str(self.current_page) + "-page", result, schema=self.current_schema)
+                    # self.rgen.generateReport(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/regular-page-parsing/" + "/"),
+                    #                      str(self.current_page) + "-page", result, schema=self.current_schema)
 
                 """add 1 to the counter because the first page got the number 1 not 0, second got 2 not 1 etc."""
                 freeblocks = self._parse_freeblocks(counter + 1, one_page)
                 if freeblocks:
                     if len(freeblocks) > 0:
                         d["body"][self.current_page]["freeblocks"] = freeblocks
-                        self.rgen.generate_freeblock_report(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/freeblocks/" + "/"),
-                                                            str(counter) + "-page-freeblocks", freeblocks)
+                        # self.rgen.generate_freeblock_report(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/freeblocks/" + "/"),
+                        #                                     str(counter) + "-page-freeblocks", freeblocks)
                 """search for unallocated areas or empty pages"""
                 p_parser = PotentiallyParser()
                 if result is not 2 and result is not 10:
                     result = p_parser.parse_page(one_page, self.filename)
                     if result:
                         d["body"][self.current_page]["unalloc"] = result
-                        self.rgen.generateReport(os.path.abspath(
-                            self.outname + "/" +
-                            super(SQLiteParser, self)._path_leaf(self.filename) + "/unalloc-parsing/" + "/"),
-                            str(counter) + "-page", result, schema=self.current_schema)
+                        # self.rgen.generateReport(os.path.abspath(
+                        #     self.outname + "/" +
+                        #     super(SQLiteParser, self)._path_leaf(self.filename) + "/unalloc-parsing/" + "/"),
+                        #     str(counter) + "-page", result, schema=self.current_schema)
                     counter += 1
 
         self._parse_freelists()
@@ -172,9 +172,9 @@ class SQLiteParser(Parser):
         res = p_parser.parse_page(flisttp, self.filename, is_trunk_page=True)
         if res:
             d["body"]["flist-trunk"] = res
-            self.rgen.generateReport(os.path.abspath(
-                self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/freelists/freelist_trunk_pages" + "/"),
-                                 str(self.page_number_of_first_freelist_trunk_page) + "-page", res, False)
+            # self.rgen.generateReport(os.path.abspath(
+            #     self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/freelists/freelist_trunk_pages" + "/"),
+            #                      str(self.page_number_of_first_freelist_trunk_page) + "-page", res, False)
 
         self._parse_freelist_leaf_pages(self.freelist_leaf_page_pointer)
         self.logger.debug("end parsing freelist")
@@ -193,8 +193,8 @@ class SQLiteParser(Parser):
                     p_parser = PotentiallyParser()
                     res = p_parser.parse_page(leaf_page, self.filename)
                 d["body"]["flis-leaf"][ptr] = res
-                self.rgen.generateReport(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/freelists/" + "/"),
-                                         str(ptr) + "-page", res, False)
+                # self.rgen.generateReport(os.path.abspath(self.outname + "/" + super(SQLiteParser, self)._path_leaf(self.filename) + "/freelists/" + "/"),
+                #                          str(ptr) + "-page", res, False)
 
     def _parse_freeblocks(self, page_number, page):
         HEADER_TYPES = [2, 5, 10, 13]

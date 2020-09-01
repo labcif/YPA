@@ -306,6 +306,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.att_list_headers[header] = self.create_attribute_type('YPA_' + normalized_header_att_id, BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, header, blackboard)
         
         # bring2lite attributes
+        self.att_b2l_page = self.create_attribute_type('YPA_WAL_B2L_PAGE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Page", blackboard)
         self.att_b2l_row = self.create_attribute_type('YPA_WAL_B2L_ROW', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Row content", blackboard)
             
     # Where the analysis is done.
@@ -326,12 +327,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             full_path = (file.getParentPath() + file.getName())
             dbConn, dbPath = db_functions.create_db_conn(self, file)
 
-            # b2l instance
-            b2lite = b2l.main(self.temp_dir)
-            b2lite.output = os.path.abspath(self.temp_dir)
-            
-            # TODO do for all DBs
-            self.db_2lite(b2lite, file, dbPath, blackboard)
             try:
                 split = full_path.split('/')                  
                 try:
@@ -355,10 +350,19 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.art_call = self.create_artifact_type("YPA_CALLING_" + guid + "_" + username, "User " + username + " - Call history", blackboard)
                     self.art_wal_crawl = self.create_artifact_type("YPA_WAL_CRAWL_" + guid + "_" + username, "User " + username + " - WAL Crawled", blackboard)
                     self.art_wal_b2l = self.create_artifact_type("YPA_WAL_B2L_" + guid + "_" + username, "User " + username + " - WAL bring2lite", blackboard)
+                    self.art_db_schema_b2l = self.create_artifact_type("YPA_DB_SCHEMA_B2L_" + guid + "_" + username, "User " + username + " - bring2lite DB Schema ", blackboard)
+                    self.art_db_body_b2l = self.create_artifact_type("YPA_DB_BODY_B2L_" + guid + "_" + username, "User " + username + " - bring2lite DB Body", blackboard)
+                    # b2l schema_related_pages?
                 except Exception as e:
                     self.log(Level.INFO, str(e))
                     continue
 
+                # b2l instance
+                b2lite = b2l.main(self.temp_dir)
+                b2lite.output = os.path.abspath(self.temp_dir)
+                
+                self.db_2lite(b2lite, file, dbPath, blackboard)
+                
                 self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", dbConn, file.getName()), file, blackboard, skCase)
 
                 self.valid_files_found = True
@@ -388,18 +392,19 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     for db in dbs:
                         db_name = db.getName()
                         if "notifications.db" in db_name:
-                            self.process_notifications(db, blackboard, skCase)
+                            self.process_notifications(db, blackboard, skCase, b2lite)
                             continue
                         if "settings.db" in db_name:
-                            self.process_settings(db, blackboard, skCase)
+                            self.process_settings(db, blackboard, skCase, b2lite)
                             continue
                         if "photos.db" in db_name:
-                            self.process_photos(db, blackboard, skCase)
+                            self.process_photos(db, blackboard, skCase, b2lite)
                             continue
                         if "calling.db" in db_name:
-                            self.process_calling(db, blackboard, skCase, attach_query, username)
+                            self.process_calling(db, blackboard, skCase, attach_query, username, b2lite)
                             continue
                         if "contacts.db" in db_name:
+                            self.db_2lite(b2lite, db, contact_db_path, blackboard)
                             self.process_recovery(contact_db_path, db, blackboard)
                             continue
                 else:
@@ -600,9 +605,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
 
-    def process_photos(self, db, blackboard, skCase):
+    def process_photos(self, db, blackboard, skCase, b2lite):
         db_conn, db_path = db_functions.create_db_conn(self, db)
         self.process_recovery(db_path, db, blackboard)
+        self.db_2lite(b2lite, db, db_path, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         
@@ -640,9 +646,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
         db_functions.close_db_conn(self, db_conn, db_path)
 
-    def process_settings(self, db, blackboard, skCase):
+    def process_settings(self, db, blackboard, skCase, b2lite):
         db_conn, db_path = db_functions.create_db_conn(self, db)
         self.process_recovery(db_path, db, blackboard)
+        self.db_2lite(b2lite, db, db_path, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         apps = db_functions.execute_query(self, APPS_QUERY, db_conn, db.getName())
@@ -676,9 +683,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
         db_functions.close_db_conn(self, db_conn, db_path)
 
-    def process_notifications(self, db, blackboard, skCase):
+    def process_notifications(self, db, blackboard, skCase, b2lite):
         db_conn, db_path = db_functions.create_db_conn(self, db)
         self.process_recovery(db_path, db, blackboard)
+        self.db_2lite(b2lite, db, db_path, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         notifications = db_functions.execute_query(self, NOTIFICATIONS_QUERY, db_conn, db.getName())
@@ -705,9 +713,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         
         db_functions.close_db_conn(self, db_conn, db_path)
     
-    def process_calling(self, db, blackboard, skCase, attach_query, username):
+    def process_calling(self, db, blackboard, skCase, attach_query, username, b2lite):
         db_conn, db_path = db_functions.create_db_conn(self, db)
         self.process_recovery(db_path, db, blackboard)
+        self.db_2lite(b2lite, db, db_path, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
         
@@ -791,6 +800,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         for wal_file in wal_files:
             wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
             ContentUtils.writeToFile(wal_file, File(wal_path))
+            self.log(Level.INFO, "WAL temp path: " + wal_path)
             self.wal_crawl(wal_file, wal_path, blackboard)
             self.wal_2lite(b2lite, wal_file, wal_path, blackboard)
 
@@ -800,8 +810,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def db_2lite(self, b2lite, db_file, db_path, blackboard):
         try:
             sqlite_data = b2lite.process_sqlite(db_path)
+            if sqlite_data:
+                for sqlite_frame in sqlite_data:
+                    for page, outer_frame in sqlite_frame['schema'].iteritems():
+                        self.process_b2l_schema_row(blackboard, self.art_db_schema_b2l, db_file, page, outer_frame)
+                    for page, outer_frame in sqlite_frame['body'].iteritems():
+                        if 'page' in outer_frame:
+                            self.process_b2l_row(blackboard, self.art_db_body_b2l, db_file, page, outer_frame['page'])        
             self.log(Level.INFO, "Successfully brought 2 lite " + db_file.getName())
-            self.log(Level.INFO, str(sqlite_data))
         except Exception as e:
             self.log(Level.INFO, "Failed to bring DB 2 lite " + db_file.getName())
             self.log(Level.SEVERE, str(e))
@@ -810,17 +826,28 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         try:
             wal_data = b2lite.process_wal(wal_path)
             self.log(Level.INFO, "Successfully brought 2 lite " + wal_file.getName())
-            self.log(Level.INFO, "WAL data: " + str(wal_data))
+            # self.log(Level.INFO, "WAL data: " + str(wal_data))
             if wal_data:
                 for wal_frame in wal_data:
-                    for key, outer_frame in wal_frame['wal'].iteritems():
-                        self.process_b2l_row(blackboard, self.art_wal_b2l, wal_file, outer_frame)
+                    for page, outer_frame in wal_frame['wal'].iteritems():
+                        self.process_b2l_row(blackboard, self.art_wal_b2l, wal_file, page, outer_frame)
                         
         except Exception as e:
             self.log(Level.INFO, "Failed to bring WAL 2 lite " + wal_file.getName())
             self.log(Level.SEVERE, str(e))
     
-    def process_b2l_row(self, blackboard, art_type, wal_file, outer_frame):
+    def process_b2l_schema_row(self, blackboard, art_type, file, page, outer_frame):
+        row = ""
+        if isinstance(outer_frame, list):
+            for y in outer_frame:
+                row += str(y) + ", "
+        
+        art = file.newArtifact(art_type.getTypeID())
+        art.addAttribute(BlackboardAttribute(self.att_b2l_page, YourPhoneIngestModuleFactory.moduleName, str(page)))
+        art.addAttribute(BlackboardAttribute(self.att_b2l_row, YourPhoneIngestModuleFactory.moduleName, row))
+        self.index_artifact(blackboard, art, art_type)
+
+    def process_b2l_row(self, blackboard, art_type, file, page, outer_frame):
         for frame in outer_frame:
             if isinstance(frame, list):
                 row = ""
@@ -833,9 +860,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                             continue
                     else:
                         row += str(y[1]) + ","
-                art = wal_file.newArtifact(art_type.getTypeID())
+                art = file.newArtifact(art_type.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_b2l_page, YourPhoneIngestModuleFactory.moduleName, str(page)))
                 art.addAttribute(BlackboardAttribute(self.att_b2l_row, YourPhoneIngestModuleFactory.moduleName, row))
-                self.log(Level.INFO, "bring2lite row data: " + row)
+                # self.log(Level.INFO, "bring2lite row data: " + row)
                 self.index_artifact(blackboard, art, art_type)
 
     def wal_crawl(self, wal_file, wal_path, blackboard):

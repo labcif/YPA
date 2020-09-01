@@ -134,6 +134,8 @@ class GUI:
 
 
     def process_wal(self, wal_path):
+        # TODO: By using append, we double the records
+        # But... it processes contacts which does not by using the approach below
         self.wals = [os.path.abspath(wal_path)]
         return self.start_processing_wal()
 

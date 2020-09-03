@@ -1,26 +1,16 @@
-import jarray
 import inspect
 import os
 import subprocess
 import time
 import json
-import sys
 import mdgMod
-import json
 
-from javax.swing import JList
-from javax.swing import JTextArea
 from javax.swing import BoxLayout
+from javax.swing import JCheckBox
+from javax.swing import JLabel
 from java.awt import GridLayout
-from java.awt import BorderLayout
-from javax.swing import BorderFactory
-from javax.swing import JToolBar
 from javax.swing import JPanel
-from javax.swing import JFrame
-from javax.swing import JScrollPane
 from javax.swing import JComponent
-from java.awt.event import KeyListener
-from org.python.core.util import StringUtil
 from java.lang import Class, System, IllegalArgumentException
 from java.util.logging import Level
 from java.io import File
@@ -137,17 +127,12 @@ class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
         return "0.3"
 
     def getDefaultIngestJobSettings(self):
-        # return YourPhoneWithUISettings()
         return GenericIngestModuleJobSettings()
 
     def hasIngestJobSettingsPanel(self):
         return True
 
     def getIngestJobSettingsPanel(self, settings):
-        # if not isinstance(settings, YourPhoneWithUISettings):
-        #    raise IllegalArgumentException("Expected settings argument to be instanceof YourPhoneWithUISettings")
-        # self.settings = settings
-        # return YourPhoneWithUISettingsPanel(self.settings)
         if not isinstance(settings, GenericIngestModuleJobSettings):
             settings = GenericIngestModuleJobSettings()
         self.settings = settings
@@ -222,6 +207,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             if not os.path.exists(self.path_to_undark):
                 raise IngestModuleException("EXE was not found in module folder")                   
         
+        self.use_undark = self.local_settings.getSetting("undark") == "true"
+        self.use_mdg = self.local_settings.getSetting("mdg") == "true"
+        self.use_crawler = self.local_settings.getSetting("crawler") == "true"
+        self.use_b2l = self.local_settings.getSetting("b2l") == "true"
 
         # Settings attributes
         self.att_dp_type = self.create_attribute_type('YPA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", blackboard)
@@ -764,7 +753,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_recovery(self, db_path, file, blackboard):
         self.log(Level.INFO, "Starting recovery...")
-        if PlatformUtil.isWindowsOS():                
+        if PlatformUtil.isWindowsOS() and self.use_undark:                
             try:
                 with open(self.temp_dir + '\\freespace.txt','w') as f:
                     subprocess.Popen([self.path_to_undark,'-i', db_path, '--freespace'],stdout=f).communicate()
@@ -781,19 +770,20 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
                 pass
-        try:
-            mdg = mdgMod.mdg_modified.sqlite_rec(db_path)
-            res = mdg.extract_deleted()
-            for line in res:
-                art = file.newArtifact(self.art_dp.getTypeID())
-                art.addAttribute(BlackboardAttribute(self.att_dp_type, YourPhoneIngestModuleFactory.moduleName, str(line[0])))
-                art.addAttribute(BlackboardAttribute(self.att_dp_offset, YourPhoneIngestModuleFactory.moduleName, str(line[1])))
-                art.addAttribute(BlackboardAttribute(self.att_dp_length, YourPhoneIngestModuleFactory.moduleName, str(line[2])))
-                art.addAttribute(BlackboardAttribute(self.att_dp_data, YourPhoneIngestModuleFactory.moduleName, str(line[3])))
-                self.index_artifact(blackboard, art,self.art_dp)
-        except Exception as e:
-            self.log(Level.SEVERE, str(e))
-            pass
+        if self.use_mdg:
+            try:
+                mdg = mdgMod.mdg_modified.sqlite_rec(db_path)
+                res = mdg.extract_deleted()
+                for line in res:
+                    art = file.newArtifact(self.art_dp.getTypeID())
+                    art.addAttribute(BlackboardAttribute(self.att_dp_type, YourPhoneIngestModuleFactory.moduleName, str(line[0])))
+                    art.addAttribute(BlackboardAttribute(self.att_dp_offset, YourPhoneIngestModuleFactory.moduleName, str(line[1])))
+                    art.addAttribute(BlackboardAttribute(self.att_dp_length, YourPhoneIngestModuleFactory.moduleName, str(line[2])))
+                    art.addAttribute(BlackboardAttribute(self.att_dp_data, YourPhoneIngestModuleFactory.moduleName, str(line[3])))
+                    self.index_artifact(blackboard, art,self.art_dp)
+            except Exception as e:
+                self.log(Level.SEVERE, str(e))
+                pass
 
     def process_wal_files(self, file, file_manager, data_source, blackboard, b2lite):
         wal_files = file_manager.findFiles(data_source, "%.db-wal", file.getParentPath())
@@ -801,27 +791,29 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         for wal_file in wal_files:
             wal_path = os.path.join(self.temp_dir, str(wal_file.getName()))
             ContentUtils.writeToFile(wal_file, File(wal_path))
-            self.log(Level.INFO, "WAL temp path: " + wal_path)
-            self.wal_crawl(wal_file, wal_path, blackboard)
-            self.wal_2lite(b2lite, wal_file, wal_path, blackboard)
+            if self.use_crawler:
+                self.wal_crawl(wal_file, wal_path, blackboard)
+            if self.use_b2l:
+                self.wal_2lite(b2lite, wal_file, wal_path, blackboard)
 
     def is_text(self, tester):
         return tester == 'TEXT'
 
     def db_2lite(self, b2lite, db_file, db_path, blackboard):
-        try:
-            sqlite_data = b2lite.process_sqlite(db_path)
-            if sqlite_data:
-                for sqlite_frame in sqlite_data:
-                    for page, outer_frame in sqlite_frame['schema'].iteritems():
-                        self.process_b2l_schema_row(blackboard, self.art_db_schema_b2l, db_file, page, outer_frame)
-                    for page, outer_frame in sqlite_frame['body'].iteritems():
-                        if 'page' in outer_frame:
-                            self.process_b2l_row(blackboard, self.art_db_body_b2l, db_file, page, outer_frame['page'])        
-            self.log(Level.INFO, "Successfully brought 2 lite " + db_file.getName())
-        except Exception as e:
-            self.log(Level.INFO, "Failed to bring DB 2 lite " + db_file.getName())
-            self.log(Level.SEVERE, str(e))
+        if self.use_b2l:
+            try:
+                sqlite_data = b2lite.process_sqlite(db_path)
+                if sqlite_data:
+                    for sqlite_frame in sqlite_data:
+                        for page, outer_frame in sqlite_frame['schema'].iteritems():
+                            self.process_b2l_schema_row(blackboard, self.art_db_schema_b2l, db_file, page, outer_frame)
+                        for page, outer_frame in sqlite_frame['body'].iteritems():
+                            if 'page' in outer_frame:
+                                self.process_b2l_row(blackboard, self.art_db_body_b2l, db_file, page, outer_frame['page'])        
+                self.log(Level.INFO, "Successfully brought 2 lite " + db_file.getName())
+            except Exception as e:
+                self.log(Level.INFO, "Failed to bring DB 2 lite " + db_file.getName())
+                self.log(Level.SEVERE, str(e))
     
     def wal_2lite(self, b2lite, wal_file, wal_path, blackboard):
         try:
@@ -889,19 +881,8 @@ class Notification(object):
         self.__dict__ = json.loads(j, encoding='utf-8')
         self.full_json = json.dumps(self.__dict__, indent=4, sort_keys=True, encoding='utf-8')
 
-class YourPhoneWithUISettings(IngestModuleIngestJobSettings): # These are just in case we end up needing an UI
-    serialVersionUID = 1L
-    
-    def __init__(self):
-        pass
-
-    def getVersionNumber(self):
-        return serialVersionUID
-
 # UI that is shown to user for each ingest job so they can configure the job.
-
-
-class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel): # These are just in case we end up needing an UI
+class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
     # Note, we can't use a self.settings instance variable.
     # Rather, self.local_settings is used.
     # https://wiki.python.org/jython/UserGuide#javabean-properties
@@ -916,15 +897,63 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel): # These 
     def __init__(self, settings):
         self.local_settings = settings
         self.initComponents()
+        self.customizeComponents()
+
+    def checkBoxEventUndark(self, event):
+        if self.checkboxUndark.isSelected():
+            self.local_settings.setSetting("undark", "true")
+        else:
+            self.local_settings.setSetting("undark", "false")
+
+    def checkBoxEventMdg(self, event):
+        if self.checkboxMdg.isSelected():
+            self.local_settings.setSetting("mdg", "true")
+        else:
+            self.local_settings.setSetting("mdg", "false")
+
+    def checkBoxEventCrawler(self, event):
+        if self.checkboxCrawler.isSelected():
+            self.local_settings.setSetting("crawler", "true")
+        else:
+            self.local_settings.setSetting("crawler", "false")
+
+    def checkBoxEventB2l(self, event):
+        if self.checkboxB2l.isSelected():
+            self.local_settings.setSetting("b2l", "true")
+        else:
+            self.local_settings.setSetting("b2l", "false")
 
     def initComponents(self):
         self.setLayout(BoxLayout(self, BoxLayout.Y_AXIS))
         # self.setLayout(GridLayout(0,1))
         self.setAlignmentX(JComponent.LEFT_ALIGNMENT)
-        self.panel1 = JPanel()
-        self.panel1.setLayout(BoxLayout(self.panel1, BoxLayout.Y_AXIS))
-        self.panel1.setAlignmentY(JComponent.LEFT_ALIGNMENT)
-        self.add(self.panel1)
+        panel1 = JPanel()
+        panel1.setLayout(BoxLayout(panel1, BoxLayout.Y_AXIS))
+        panel1.setAlignmentY(JComponent.LEFT_ALIGNMENT)
+
+        self.labelCheckText = JLabel("Run recoveries: ")
+
+        self.checkboxUndark = JCheckBox("Undark", actionPerformed=self.checkBoxEventUndark)
+        self.checkboxMdg = JCheckBox("MGD Delete Parser", actionPerformed=self.checkBoxEventMdg)
+        self.checkboxCrawler = JCheckBox("WAL Crawler", actionPerformed=self.checkBoxEventCrawler)
+        self.checkboxB2l = JCheckBox("bring2lite", actionPerformed=self.checkBoxEventB2l)
+        
+        self.checkboxUndark.setSelected(True)
+        self.checkboxMdg.setSelected(True)
+        
+        self.add(self.labelCheckText)
+        
+        panel1.add(self.checkboxUndark)
+        panel1.add(self.checkboxMdg)
+        panel1.add(self.checkboxCrawler)
+        panel1.add(self.checkboxB2l)
+        self.add(panel1)
+
+    def customizeComponents(self):
+        self.checkboxUndark.setSelected(self.local_settings.getSetting("undark") == "true")
+        self.checkboxMdg.setSelected(self.local_settings.getSetting("mdg") == "true")
+        self.checkboxCrawler.setSelected(self.local_settings.getSetting("crawler") == "true")
+        self.checkboxB2l.setSelected(self.local_settings.getSetting("b2l") == "true")
 
     # Return the settings used
     def getSettings(self):

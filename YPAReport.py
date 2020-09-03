@@ -17,6 +17,7 @@ from org.sleuthkit.autopsy.coreutils import Logger
 from org.sleuthkit.autopsy.coreutils import Version
 from org.sleuthkit.autopsy.report import GeneralReportModuleAdapter
 from org.sleuthkit.autopsy.report.ReportProgressPanel import ReportStatus
+from org.sleuthkit.autopsy.datamodel import ContentUtils
 from org.sleuthkit.datamodel import AbstractFile
 
 from javax.swing import JPanel
@@ -30,6 +31,7 @@ from db import db_functions
 
 from java.awt.image import BufferedImage
 from java.io import File, ByteArrayOutputStream, ByteArrayInputStream, File
+from java.nio.file import Files
 from javax.imageio import ImageIO
 from java.lang import NullPointerException
 
@@ -43,6 +45,7 @@ SELF_MESSAGE_DEFAULT = NOT_AVAILABLE + " (Self)"
 SELF_USER = "Self"
 NUM_ARTIFACTS_PROGRESS = 10
 IMAGE_EXTENSION = ".jpg"
+DEFAULT_PHOTO = "default" + IMAGE_EXTENSION
 PHOTO_MEDIA_QUERY = "SELECT m.thumbnail, media, m.id \
                 FROM media m \
                 LEFT JOIN photo p on m.name = p.name \
@@ -396,6 +399,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             bis = ByteArrayInputStream(photo_bytes)
             b_image = ImageIO.read(bis)
             ImageIO.write(b_image, "jpg", File(path))
+            self.saved_photos.append(name)
         except Exception as e:
             self.log(Level.SEVERE, "Error saving photo: " + str(e))
         return path
@@ -403,6 +407,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def add_photo_to_parent(self, html_file, parent, photo_path):
         td = html_file.new_tag("td")
         img = html_file.new_tag("img")
+        if photo_path not in self.saved_photos:
+            photo_path = DEFAULT_PHOTO
         img['src'] = photo_path
         # img['width'] = "200"
         # img['height'] = "200"
@@ -467,6 +473,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         self.last_obj_id = None
         self.db_conn = None
         self.db_path = None
+        self.saved_photos = []
         # Count execution time
         start_time = time.time()
 
@@ -549,6 +556,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         with open(template_name_phone_apps) as base_dir:
             txt = base_dir.read()
             html_ypa_phone_apps = bs4.BeautifulSoup(txt)
+
+        # Save default photo to report folder
+        repo_default_photo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), DEFAULT_PHOTO)
+        self.save_photo(Files.readAllBytes((File(repo_default_photo_path)).toPath()), baseReportDir, DEFAULT_PHOTO)
 
         self.add_link_to_html_report(html_ypa, "#address-book", self.getRelativeFilePathAddressBook())
         self.add_link_to_html_report(html_ypa, "#photos", self.getRelativeFilePathPhotos())

@@ -607,7 +607,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_photos(self, db, blackboard, skCase, b2lite):
         db_conn, db_path = db_functions.create_db_conn(self, db)
-        self.process_recovery(db_path, db, blackboard)
+        # Disabled photo recovery for now, as it takes a long time...
+        # self.process_recovery(db_path, db, blackboard)
         self.db_2lite(b2lite, db, db_path, blackboard)
 
         self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)

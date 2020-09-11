@@ -677,7 +677,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         result, stmt = db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path)
         self.process_db_user_version(result, db, blackboard, skCase)
         stmt.close()
-        
+
         apps, stmt = db_functions.execute_query(self, APPS_QUERY, db_conn, db.getName())
         if apps:
             while apps.next():
@@ -996,6 +996,13 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
         self.add(panel1)
 
     def customizeComponents(self):
+        # Set defaults if not set
+        if not self.local_settings.getSetting("undark"):
+            self.local_settings.setSetting("undark", "true")
+        if not self.local_settings.getSetting("mdg"):
+            self.local_settings.setSetting("mdg", "true")
+
+        # Update checkboxes with stored settings
         self.checkboxUndark.setSelected(self.local_settings.getSetting("undark") == "true")
         self.checkboxMdg.setSelected(self.local_settings.getSetting("mdg") == "true")
         self.checkboxCrawler.setSelected(self.local_settings.getSetting("crawler") == "true")

@@ -354,7 +354,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 
                 self.db_2lite(b2lite, file, dbPath, blackboard)
                 
-                self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", dbConn, file.getName()), file, blackboard, skCase)
+                result, stmt = db_functions.execute_query(self, "PRAGMA user_version", dbConn, file.getName())
+                self.process_db_user_version(result, file, blackboard, skCase)
+                stmt.close()
 
                 self.valid_files_found = True
 
@@ -373,15 +375,33 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 
                 if contact_db:
                     # We are in a new DB schema!
-                    contact_db_path = os.path.join(file.getLocalPath().rsplit('\\', 1)[0], "contacts.db")
-                    attach_query = ("ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB")
-                    dbConn = db_functions.execute_statement(self, attach_query, dbConn, file.getName())
-                    self.processContacts(db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName()), contact_db, blackboard, skCase)
-                    self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase, username)
-                    self.processMms(db_functions.execute_query(self, MMS_QUERY_ATTACHED, dbConn, file.getName()), file, blackboard, skCase)
+                    contact_db_path = os.path.join(self.temp_dir, contact_db.getName())
+                    ContentUtils.writeToFile(contact_db, File(contact_db_path))
+                    attach_query = "ATTACH DATABASE \"" + contact_db_path + "\" AS contactsDB"
+                    self.log(Level.INFO, "Attach query: " + attach_query)
+                    attach_stmt = db_functions.execute_statement(self, attach_query, dbConn, file.getName())
+
+                    result, stmt = db_functions.execute_query(self, CONTACT_QUERY_ATTACHED, dbConn, file.getName())
+                    self.processContacts(result, contact_db, blackboard, skCase)
+                    stmt.close()
+
+                    result, stmt = db_functions.execute_query(self, MESSAGES_QUERY_ATTACHED, dbConn, file.getName())
+                    self.processMessages(result, file, blackboard, skCase, username)
+                    stmt.close()
+
+                    result, stmt = db_functions.execute_query(self, MMS_QUERY_ATTACHED, dbConn, file.getName())
+                    self.processMms(result, file, blackboard, skCase)
+                    stmt.close()
+
+                    attach_stmt.close()
+
+                    dettach_query = "DETACH DATABASE 'contactsDB'"
+                    dettach_stmt = db_functions.execute_statement(self, dettach_query, dbConn, file.getName())
+                    dettach_stmt.close()
 
                     for db in dbs:
                         db_name = db.getName()
+                        self.log(Level.INFO, "Processing YourPhone DB: " + db_name)
                         if "notifications.db" in db_name:
                             self.process_notifications(db, blackboard, skCase, b2lite)
                             continue
@@ -398,10 +418,17 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                             self.db_2lite(b2lite, db, contact_db_path, blackboard)
                             self.process_recovery(contact_db_path, db, blackboard)
                             continue
+                    self.log(Level.INFO, "Finished processing all YourPhone DBs")
                 else:
-                    self.processContacts(db_functions.execute_query(self, CONTACT_QUERY, dbConn, file.getName()), file, blackboard, skCase)
-                    self.processMessages(db_functions.execute_query(self, MESSAGES_QUERY, dbConn, file.getName()), file, blackboard, skCase, username)
-                    self.processMms(db_functions.execute_query(self, MMS_QUERY, dbConn, file.getName()), file, blackboard, skCase)
+                    result, stmt = db_functions.execute_query(self, CONTACT_QUERY, dbConn, file.getName())
+                    self.processContacts(result, file, blackboard, skCase)
+                    stmt.close()
+                    result, stmt = db_functions.execute_query(self, MESSAGES_QUERY, dbConn, file.getName())
+                    self.processMessages(result, file, blackboard, skCase, username)
+                    stmt.close()
+                    result, stmt = db_functions.execute_query(self, MMS_QUERY, dbConn, file.getName())
+                    self.processMms(result, file, blackboard, skCase)
+                    stmt.close()
                     
                     for db in dbs:
                         db_name = db.getName()
@@ -456,6 +483,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         user_version = prag_uv.getString("user_version")
         art.addAttribute(BlackboardAttribute(self.att_db_uv, YourPhoneIngestModuleFactory.moduleName, user_version))
         self.index_artifact(blackboard, art, self.art_settings)
+        self.log(Level.INFO, "DB " + file.getName() + " has user_version set to " + str(user_version))
         return user_version
 
     def processMms(self, mms, file, blackboard, skCase):
@@ -602,14 +630,16 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         # self.process_recovery(db_path, db, blackboard)
         self.db_2lite(b2lite, db, db_path, blackboard)
 
-        self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
+        result, stmt = db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path)
+        self.process_db_user_version(result, db, blackboard, skCase)
+        stmt.close()
         
         # Try to make the new query - in case we fail, fallback to the old one
         try:
-            photos = db_functions.execute_query(self, PHOTOS_MEDIA_QUERY, db_conn, db.getName())
+            photos, stmt = db_functions.execute_query(self, PHOTOS_MEDIA_QUERY, db_conn, db.getName())
             new_query = True
         except Exception as e:
-            photos = db_functions.execute_query(self, PHOTOS_QUERY, db_conn, db.getName())
+            photos, stmt = db_functions.execute_query(self, PHOTOS_QUERY, db_conn, db.getName())
             new_query = False
             self.log(Level.INFO, "Failed to use the new media query: " + str(e))
         if not photos:
@@ -635,16 +665,20 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 self.index_artifact(blackboard, art, self.art_photo)
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
-
+        stmt.close()
         db_functions.close_db_conn(self, db_conn, db_path)
 
     def process_settings(self, db, blackboard, skCase, b2lite):
         db_conn, db_path = db_functions.create_db_conn(self, db)
         self.process_recovery(db_path, db, blackboard)
-        self.db_2lite(b2lite, db, db_path, blackboard)
+        # b2l was taking a long time here...
+        # self.db_2lite(b2lite, db, db_path, blackboard)
 
-        self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
-        apps = db_functions.execute_query(self, APPS_QUERY, db_conn, db.getName())
+        result, stmt = db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path)
+        self.process_db_user_version(result, db, blackboard, skCase)
+        stmt.close()
+        
+        apps, stmt = db_functions.execute_query(self, APPS_QUERY, db_conn, db.getName())
         if apps:
             while apps.next():
                 try:
@@ -658,8 +692,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                     self.log(Level.SEVERE, str(e))
 
         apps.close()
+        stmt.close()
 
-        settings = db_functions.execute_query(self, SETTINGS_QUERY, db_conn, db.getName())
+        settings, stmt = db_functions.execute_query(self, SETTINGS_QUERY, db_conn, db.getName())
 
         if settings:
             while settings.next():
@@ -673,6 +708,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 except Exception as e:
                     self.log(Level.SEVERE, str(e))
 
+        stmt.close()
         db_functions.close_db_conn(self, db_conn, db_path)
 
     def process_notifications(self, db, blackboard, skCase, b2lite):
@@ -680,8 +716,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.process_recovery(db_path, db, blackboard)
         self.db_2lite(b2lite, db, db_path, blackboard)
 
-        self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
-        notifications = db_functions.execute_query(self, NOTIFICATIONS_QUERY, db_conn, db.getName())
+        result, stmt = db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path)
+        self.process_db_user_version(result, db, blackboard, skCase)
+        stmt.close()
+        notifications, stmt = db_functions.execute_query(self, NOTIFICATIONS_QUERY, db_conn, db.getName())
         
         if not notifications:
             return
@@ -703,6 +741,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
         
+        stmt.close()
         db_functions.close_db_conn(self, db_conn, db_path)
     
     def process_calling(self, db, blackboard, skCase, attach_query, username, b2lite):
@@ -710,12 +749,14 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.process_recovery(db_path, db, blackboard)
         self.db_2lite(b2lite, db, db_path, blackboard)
 
-        self.process_db_user_version(db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path), db, blackboard, skCase)
+        result, stmt = db_functions.execute_query(self, "PRAGMA user_version", db_conn, db_path)
+        self.process_db_user_version(result, db, blackboard, skCase)
+        stmt.close()
         
         # Attach contacts.db
         db_functions.execute_statement(self, attach_query, db_conn, db.getName())
 
-        call_history = db_functions.execute_query(self, CALLINGS_QUERY, db_conn, db.getName())
+        call_history, stmt = db_functions.execute_query(self, CALLINGS_QUERY, db_conn, db.getName())
         
         commManager = skCase.getCommunicationsManager()
         # "0" is a workaround for the username... Seems like strings are invalid inputs for Autopsy...
@@ -751,10 +792,11 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
         
+        stmt.close()
         db_functions.close_db_conn(self, db_conn, db_path)
 
     def process_recovery(self, db_path, file, blackboard):
-        self.log(Level.INFO, "Starting recovery...")
+        self.log(Level.INFO, "Starting recovery for " + file.getName())
         if PlatformUtil.isWindowsOS() and self.use_undark:                
             try:
                 with open(self.temp_dir + '\\freespace.txt','w') as f:
@@ -786,6 +828,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             except Exception as e:
                 self.log(Level.SEVERE, str(e))
                 pass
+        self.log(Level.INFO, "Finished recovery for " + file.getName())
 
     def process_wal_files(self, file, file_manager, data_source, blackboard, b2lite):
         wal_files = file_manager.findFiles(data_source, "%.db-wal", file.getParentPath())

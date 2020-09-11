@@ -313,6 +313,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 self.add_icon_to_parent(html_file, td, "call_made")
             if attribute == "Missed":
                 self.add_icon_to_parent(html_file, td, "call_missed")
+            if attribute == "Declined":
+                self.add_icon_to_parent(html_file, td, "call_missed_outgoing")
 
             if attribute == "1970-01-01T00:00:00Z":
                 td.string = "---"

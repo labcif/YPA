@@ -102,7 +102,9 @@ WHERE pn.display_phone_number IS NULL"
 CALL_TYPE = {
     '1' : 'Incoming',
     '2' : 'Outgoing',
-    '3' : 'Missed'
+    '3' : 'Missed',
+    '4' : 'Unknown',
+    '5' : 'Declined'
 }
 IS_READ_TYPE = {
     0 : 'Taken',
@@ -805,8 +807,9 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 sqlite_data = b2lite.process_sqlite(db_path)
                 if sqlite_data:
                     for sqlite_frame in sqlite_data:
-                        for page, outer_frame in sqlite_frame['schema'].iteritems():
-                            self.process_b2l_schema_row(blackboard, self.art_db_schema_b2l, db_file, page, outer_frame)
+                        # Let's skip out schema, it doesn't provide any real value.
+                        # for page, outer_frame in sqlite_frame['schema'].iteritems():
+                        #     self.process_b2l_schema_row(blackboard, self.art_db_schema_b2l, db_file, page, outer_frame)
                         for page, outer_frame in sqlite_frame['body'].iteritems():
                             if 'page' in outer_frame:
                                 self.process_b2l_row(blackboard, self.art_db_body_b2l, db_file, page, outer_frame['page'])        

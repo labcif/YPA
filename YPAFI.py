@@ -797,7 +797,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def process_recovery(self, db_path, file, blackboard):
         self.log(Level.INFO, "Starting recovery for " + file.getName())
-        if PlatformUtil.isWindowsOS() and self.use_undark:                
+        if PlatformUtil.isWindowsOS() and self.use_undark:
             try:
                 with open(self.temp_dir + '\\freespace.txt','w') as f:
                     subprocess.Popen([self.path_to_undark,'-i', db_path, '--freespace'],stdout=f).communicate()

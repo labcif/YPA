@@ -98,7 +98,6 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
         self.use_crawler = self.local_settings.getSetting("crawler") == "true"
         self.use_b2l = self.local_settings.getSetting("b2l") == "true"
         self.python_path = self.local_settings.getSetting("python_path")
-        # TODO: Process recovery
         # TODO: Process handler other assets
         
         # Generic attributes

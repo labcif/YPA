@@ -1,9 +1,7 @@
 import inspect
 import os
 import subprocess
-import time
 import json
-import mdgMod
 
 from javax.swing import BoxLayout
 from javax.swing import JCheckBox
@@ -11,7 +9,7 @@ from javax.swing import JLabel
 from java.awt import GridLayout
 from javax.swing import JPanel
 from javax.swing import JComponent
-from java.lang import Class, System, IllegalArgumentException
+from java.lang import Class
 from java.util.logging import Level
 from java.io import File
 from org.sleuthkit.datamodel import SleuthkitCase
@@ -46,6 +44,7 @@ from org.sleuthkit.datamodel import Account
 from db import db_functions
 from crawler import wal_crawler
 from bring2lite import main as b2l
+import mdgMod
 
 ARTIFACT_PREFIX = "YourPhone: "
 
@@ -112,8 +111,7 @@ IS_READ_TYPE = {
     0 : 'Taken',
     1 : 'Missed'
 }
-# Factory that defines the name and details of the module and allows Autopsy
-# to create instances of the modules that will do the analysis.
+
 class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
 
     def __init__(self):
@@ -161,13 +159,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def __init__(self, settings):
         self.context = None
         self.local_settings = settings
-        self.art_list = []
-
-    def create_temp_directory(self, dir):
-        try:
-            os.mkdir(self.temp_dir + dir)
-        except:
-            self.log(Level.INFO, "ERROR: " + dir + " directory already exists")
 
     def get_or_create_account(self, manager, file, phone_number):
         return manager.createAccountFileInstance(Account.Type.PHONE, phone_number, YourPhoneIngestModuleFactory.moduleName, file.getDataSource())
@@ -178,7 +169,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             blackboard.indexArtifact(artifact)
         except Blackboard.BlackboardException as e:
             self.log(Level.INFO, "Error indexing artifact " +
-                     artifact.getDisplayName() + "" +str(e))
+                     artifact.getDisplayName() + " " +str(e))
         # Fire an event to notify the UI and others that there is a new log artifact
         IngestServices.getInstance().fireModuleDataEvent(
             ModuleDataEvent(YourPhoneIngestModuleFactory.moduleName,
@@ -187,7 +178,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
     def create_artifact_type(self, art_name, art_desc, blackboard):
         try:
             art = blackboard.getOrAddArtifactType(art_name, ARTIFACT_PREFIX + art_desc)
-            self.art_list.append(art)
         except Exception as e :
             self.log(Level.INFO, "Error getting or adding artifact type: " + art_desc + " " + str(e))
         return art
@@ -199,7 +189,6 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             self.log(Level.INFO, "Error getting or adding attribute type: " + att_desc + " " + str(e))
         return att_type
 
-    # Where any setup and configuration is done
     # 'context' is an instance of org.sleuthkit.autopsy.ingest.IngestJobContext.
     # See: http://sleuthkit.org/autopsy/docs/api-docs/3.1/classorg_1_1sleuthkit_1_1autopsy_1_1ingest_1_1_ingest_job_context.html
     def startUp(self, context):
@@ -323,33 +312,28 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             try:
                 split = full_path.split('/')                  
                 try:
-                    try:
-                        username = split[-11]
-                        guid = split[-4]
-                    except IndexError:
-                        username = "UNKNOWN"
-                        guid = "UNKNOWN"
-                    self.art_contacts = self.create_artifact_type("YPA_CONTACTS_" + guid + "_" + username,"User " + username + " - Contacts", blackboard)
-                    self.art_messages = self.create_artifact_type("YPA_MESSAGE_" + guid + "_" + username,"User " + username + " - SMS", blackboard)
-                    self.art_mms = self.create_artifact_type("YPA_MMS_" + guid + "_" + username,"User " + username + " - MMS", blackboard)
-                    self.art_pictures = self.create_artifact_type("YPA_PICTURES_" + guid + "_" + username,"User " + username +  " - Recent pictures", blackboard)
-                    self.art_freespace = self.create_artifact_type("YPA_FREESPACE_" + guid + "_" + username,"User " + username +  " - Rows recovered (undark)", blackboard)
-                    self.art_dp = self.create_artifact_type("YPA_DP_" + guid + "_" + username,"User " + username + " - Rows recovered (Delete parser)", blackboard)
-                    self.art_settings = self.create_artifact_type("YPA_SETTINGS_" + guid + "_" + username,"User " + username + " - Database settings", blackboard)
-                    self.art_photo = self.create_artifact_type("YPA_PHOTO_" + guid + "_" + username, "User " + username + " - Photos", blackboard)
-                    self.art_phone_app = self.create_artifact_type("YPA_PHONE_APP_" + guid + "_" + username, "User " + username + " - Phone apps", blackboard)
-                    self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + guid + "_" + username, "User " + username + " - Phone settings", blackboard)
-                    self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + guid + "_" + username, "User " + username + " - Notifications", blackboard)
-                    self.art_call = self.create_artifact_type("YPA_CALLING_" + guid + "_" + username, "User " + username + " - Call history", blackboard)
-                    self.art_wal_crawl = self.create_artifact_type("YPA_WAL_CRAWL_" + guid + "_" + username, "User " + username + " - WAL Crawled", blackboard)
-                    self.art_wal_b2l = self.create_artifact_type("YPA_WAL_B2L_" + guid + "_" + username, "User " + username + " - WAL bring2lite", blackboard)
-                    self.art_db_schema_b2l = self.create_artifact_type("YPA_DB_SCHEMA_B2L_" + guid + "_" + username, "User " + username + " - bring2lite DB Schema ", blackboard)
-                    self.art_db_body_b2l = self.create_artifact_type("YPA_DB_BODY_B2L_" + guid + "_" + username, "User " + username + " - bring2lite DB Body", blackboard)
-                    # b2l schema_related_pages?
-                except Exception as e:
-                    self.log(Level.INFO, str(e))
-                    continue
-
+                    username = split[-11]
+                    guid = split[-4]
+                except IndexError:
+                    username = "UNKNOWN"
+                    guid = "UNKNOWN"
+                self.art_contacts = self.create_artifact_type("YPA_CONTACTS_" + guid + "_" + username,"User " + username + " - Contacts", blackboard)
+                self.art_messages = self.create_artifact_type("YPA_MESSAGE_" + guid + "_" + username,"User " + username + " - SMS", blackboard)
+                self.art_mms = self.create_artifact_type("YPA_MMS_" + guid + "_" + username,"User " + username + " - MMS", blackboard)
+                self.art_pictures = self.create_artifact_type("YPA_PICTURES_" + guid + "_" + username,"User " + username +  " - Recent pictures", blackboard)
+                self.art_freespace = self.create_artifact_type("YPA_FREESPACE_" + guid + "_" + username,"User " + username +  " - Rows recovered (undark)", blackboard)
+                self.art_dp = self.create_artifact_type("YPA_DP_" + guid + "_" + username,"User " + username + " - Rows recovered (Delete parser)", blackboard)
+                self.art_settings = self.create_artifact_type("YPA_SETTINGS_" + guid + "_" + username,"User " + username + " - Database settings", blackboard)
+                self.art_photo = self.create_artifact_type("YPA_PHOTO_" + guid + "_" + username, "User " + username + " - Photos", blackboard)
+                self.art_phone_app = self.create_artifact_type("YPA_PHONE_APP_" + guid + "_" + username, "User " + username + " - Phone apps", blackboard)
+                self.art_phone_setting = self.create_artifact_type("YPA_PHONE_SETTING_" + guid + "_" + username, "User " + username + " - Phone settings", blackboard)
+                self.art_phone_notification = self.create_artifact_type("YPA_PHONE_NOTIFICATION_" + guid + "_" + username, "User " + username + " - Notifications", blackboard)
+                self.art_call = self.create_artifact_type("YPA_CALLING_" + guid + "_" + username, "User " + username + " - Call history", blackboard)
+                self.art_wal_crawl = self.create_artifact_type("YPA_WAL_CRAWL_" + guid + "_" + username, "User " + username + " - WAL Crawled", blackboard)
+                self.art_wal_b2l = self.create_artifact_type("YPA_WAL_B2L_" + guid + "_" + username, "User " + username + " - WAL bring2lite", blackboard)
+                self.art_db_schema_b2l = self.create_artifact_type("YPA_DB_SCHEMA_B2L_" + guid + "_" + username, "User " + username + " - bring2lite DB Schema ", blackboard)
+                self.art_db_body_b2l = self.create_artifact_type("YPA_DB_BODY_B2L_" + guid + "_" + username, "User " + username + " - bring2lite DB Body", blackboard)
+                # b2l schema_related_pages?
                 # b2l instance
                 b2lite = b2l.main(self.temp_dir)
                 b2lite.output = os.path.abspath(self.temp_dir)
@@ -929,7 +913,6 @@ class Notification(object):
         self.__dict__ = json.loads(j, encoding='utf-8')
         self.full_json = json.dumps(self.__dict__, indent=4, sort_keys=True, encoding='utf-8')
 
-# UI that is shown to user for each ingest job so they can configure the job.
 class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
     # Note, we can't use a self.settings instance variable.
     # Rather, self.local_settings is used.
@@ -973,7 +956,6 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
 
     def initComponents(self):
         self.setLayout(BoxLayout(self, BoxLayout.Y_AXIS))
-        # self.setLayout(GridLayout(0,1))
         self.setAlignmentX(JComponent.LEFT_ALIGNMENT)
         panel1 = JPanel()
         panel1.setLayout(BoxLayout(panel1, BoxLayout.Y_AXIS))
@@ -1010,6 +992,5 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
         self.checkboxCrawler.setSelected(self.local_settings.getSetting("crawler") == "true")
         self.checkboxB2l.setSelected(self.local_settings.getSetting("b2l") == "true")
 
-    # Return the settings used
     def getSettings(self):
         return self.local_settings

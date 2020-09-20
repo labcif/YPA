@@ -41,6 +41,8 @@ from crawler import wal_crawler
 from bring2lite import main as b2l
 import mdgMod
 
+ARTIFACT_PREFIX = "WPN: "
+
 class NotificationAnalyzerDataSourceIngestModuleFactory(IngestModuleFactoryAdapter):
 
     moduleName = "Windows Notifications Analyzer"
@@ -102,6 +104,8 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
         
         # Generic attributes
         self.att_id = self.create_attribute_type('NA_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "ID", blackboard)
+        self.att_key = self.create_attribute_type('NA_KEY', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Key", blackboard)
+        self.att_value = self.create_attribute_type('NA_VALUE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Value", blackboard)
         self.att_type = self.create_attribute_type('NA_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", blackboard)
         self.att_created_time = self.create_attribute_type('NA_CREATED_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Created time", blackboard)
         self.att_modified_time = self.create_attribute_type('NA_UPDATED_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Updated time", blackboard)
@@ -109,6 +113,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
         self.att_arrival_time = self.create_attribute_type('NA_ARRIVAL_TIME', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME, "Arrival time", blackboard)
 
         # Notification handler attributes
+        self.att_handler_id = self.create_attribute_type('NA_HANDLER_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Handler ID", blackboard)
         self.att_handler_primary_id = self.create_attribute_type('NA_HANDLER_PRIMARY_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Primary ID", blackboard)
         self.att_parent_id = self.create_attribute_type('NA_PARENT_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Parent ID", blackboard)
         self.att_wns_id = self.create_attribute_type('NA_WNS_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "WNS ID", blackboard)
@@ -171,6 +176,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
             self.art_notification = self.create_artifact_type("NA_NOTIFICATION_" + username, "User " + username + " - Notifications", blackboard)
             self.art_notification_handler = self.create_artifact_type("NA_NOTIFICATION_HANDLER_" + username, "User " + username + " - Notification handler", blackboard)
             self.art_settings = self.create_artifact_type("NA_SETTINGS_" + username, "User " + username + " - Database settings", blackboard)
+            self.art_other_asset = self.create_artifact_type("NA_HANDLER_OTHER_ASSET_" + username, "User " + username + " - Handler other assets", blackboard)
 
             self.art_wal_crawl = self.create_artifact_type("NA_WAL_CRAWL_" + username, "User " + username + " - WAL Crawled", blackboard)
             self.art_wal_b2l = self.create_artifact_type("NA_WAL_B2L_" + username, "User " + username + " - WAL bring2lite", blackboard)
@@ -202,10 +208,11 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
                 user_version = data["user_version"]
                 art.addAttribute(BlackboardAttribute(self.att_db_uv, self.moduleName, str(user_version)))
                 self.index_artifact(blackboard, art, self.art_settings)
+                self.log(Level.INFO, "DB has version: " + str(user_version))
                 
                 for key, handler in data["assets"].iteritems():
                     for child_key, value in handler.iteritems():
-                        if not value and child_key <> "Notifications":
+                        if value is None:
                             handler[child_key] = "N/A"
                     if "AppName" in handler:
                         app_name = handler["AppName"]
@@ -235,11 +242,21 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
                         art.addAttribute(BlackboardAttribute(self.att_arrival_time, self.moduleName, arrival_time))
 
                         self.index_artifact(blackboard, art, self.art_notification)
+                    
+                    for asset in handler["OtherAssets"]:
+                        art = file.newArtifact(self.art_other_asset.getTypeID())
+                        art.addAttribute(BlackboardAttribute(self.att_handler_id, self.moduleName, str(handler["HandlerId"])))
+                        art.addAttribute(BlackboardAttribute(self.att_parent_id, self.moduleName, str(handler["ParentId"])))
+                        asset_key = asset.keys()[0]
+                        art.addAttribute(BlackboardAttribute(self.att_key, self.moduleName, str(asset_key)))
+                        art.addAttribute(BlackboardAttribute(self.att_value, self.moduleName, str(asset[asset_key])))
+
+                        self.index_artifact(blackboard, art, self.art_other_asset)
             self.log(Level.INFO, "Processed successfully...")
 
         #Post a message to the ingest messages in box.
         message = IngestMessage.createMessage(IngestMessage.MessageType.DATA,
-            "Notifications Analyzer Data Source Ingest Module", "[NA] Finished processing %d Notification databases" % num_files)
+            "Notifications Analyzer Data Source Ingest Module", ARTIFACT_PREFIX + "Finished processing %d Notification databases" % num_files)
         IngestServices.getInstance().postMessage(message)
 
         return IngestModule.ProcessResult.OK
@@ -259,7 +276,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
 
     def create_artifact_type(self, art_name, art_desc, blackboard):
         try:
-            art = blackboard.getOrAddArtifactType(art_name, "NA: " + art_desc)
+            art = blackboard.getOrAddArtifactType(art_name, ARTIFACT_PREFIX + art_desc)
             # self.art_list.append(art)
         except Exception as e :
             self.log(Level.INFO, "Error getting or adding artifact type: " + art_desc + " " + str(e))

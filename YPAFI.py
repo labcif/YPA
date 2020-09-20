@@ -47,6 +47,8 @@ from db import db_functions
 from crawler import wal_crawler
 from bring2lite import main as b2l
 
+ARTIFACT_PREFIX = "YourPhone: "
+
 # DB queries
 CONTACT_QUERY = "select a.contact_id, a.address,c.display_name, a.address_type, a.times_contacted, (a.last_contacted_time / 10000000 - 11644473600) as last_contacted_time,  (c.last_updated_time/ 10000000 - 11644473600) as last_updated_time from address a join contact c on a.contact_id = c.contact_id"
 MESSAGES_QUERY = "select m.thread_id, m.message_id, con.recipient_list , ifnull(c.display_name,'n/a') as display_name,  m.body, m.status, CASE WHEN ifnull(m.from_address,'Self') = '' THEN 'Self' ELSE ifnull(m.from_address,'Self') END as from_address,(m.timestamp / 10000000 - 11644473600) as timestamp from message m left join address a on m.from_address = a.address left join contact c on a.contact_id = c.contact_id join conversation con on con.thread_id = m.thread_id order by m.message_id"
@@ -184,7 +186,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
 
     def create_artifact_type(self, art_name, art_desc, blackboard):
         try:
-            art = blackboard.getOrAddArtifactType(art_name, "YPA: " + art_desc)
+            art = blackboard.getOrAddArtifactType(art_name, ARTIFACT_PREFIX + art_desc)
             self.art_list.append(art)
         except Exception as e :
             self.log(Level.INFO, "Error getting or adding artifact type: " + art_desc + " " + str(e))

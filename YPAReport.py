@@ -19,6 +19,7 @@ from org.sleuthkit.autopsy.report import GeneralReportModuleAdapter
 from org.sleuthkit.autopsy.report.ReportProgressPanel import ReportStatus
 from org.sleuthkit.autopsy.datamodel import ContentUtils
 from org.sleuthkit.datamodel import AbstractFile
+from org.sleuthkit.datamodel import BlackboardAttribute
 
 from javax.swing import JPanel
 from javax.swing import JComboBox
@@ -428,7 +429,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             p_attribute = html_file.new_tag("p")
             b_attribute_display = html_file.new_tag("b")
             b_attribute_display.string = attribute.getAttributeType().getDisplayName()
-            p_attribute.string = attribute.getDisplayString()
+            att_type = attribute.getValueType()
+            if att_type is BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.DATETIME:
+                p_attribute.string = self.unix_to_date_string(attribute.getValueLong())
+            else:
+                p_attribute.string = attribute.getDisplayString()
             div_body.append(b_attribute_display)
             div_body.append(p_attribute)
     

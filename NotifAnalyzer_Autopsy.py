@@ -174,7 +174,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
             except IndexError:
                 username = "UNKNOWN"
             self.art_notification = self.create_artifact_type("NA_NOTIFICATION_" + username, "User " + username + " - Notifications", blackboard)
-            self.art_notification_handler = self.create_artifact_type("NA_NOTIFICATION_HANDLER_" + username, "User " + username + " - Notification handler", blackboard)
+            self.art_notification_handler = self.create_artifact_type("NA_HANDLER_NOTIFICATION_" + username, "User " + username + " - Notification handler", blackboard)
             self.art_settings = self.create_artifact_type("NA_SETTINGS_" + username, "User " + username + " - Database settings", blackboard)
             self.art_other_asset = self.create_artifact_type("NA_HANDLER_OTHER_ASSET_" + username, "User " + username + " - Handler other assets", blackboard)
 
@@ -233,6 +233,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
 
                     for notification in handler["Notifications"]:
                         art = file.newArtifact(self.art_notification.getTypeID())
+                        art.addAttribute(BlackboardAttribute(self.att_app_name, self.moduleName, app_name))
                         art.addAttribute(BlackboardAttribute(self.att_type, self.moduleName, str(notification["Type"])))
                         art.addAttribute(BlackboardAttribute(self.att_payload_type, self.moduleName, str(notification["PayloadType"])))
                         art.addAttribute(BlackboardAttribute(self.att_payload, self.moduleName, str(notification["Payload"])))

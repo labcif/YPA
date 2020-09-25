@@ -344,7 +344,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         call_history = html_file.select("#call-history-table")[0]
         call_history.append(tr_call)
     
-    def add_to_phone_apps(self, html_file, att_list, play_store_link, username):
+    def add_to_phone_apps(self, html_file, att_list, play_store_link, username, app_name):
+        modal_id = MODAL_PREFIX + username + app_name
         tr_app = self.create_tr_for_table(html_file, username, None, att_list)
 
         # Add play store link
@@ -356,8 +357,80 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         td_link.append(a_link)
         tr_app.append(td_link)
 
+        # Notifications
+        div_modal = html_file.find(id = modal_id)
+        if div_modal is not None:
+            td_button = html_file.new_tag("td")
+            button_notif = html_file.new_tag("button")
+            button_notif['class'] = "btn btn-primary"
+            button_notif['data-toggle'] = "modal"
+            button_notif['data-target'] = HTML_MODAL_PREFIX + username + app_name
+            button_notif.string = "Open"
+            
+            td_button.append(button_notif)
+            tr_app.append(td_button)
+
         phone_apps = html_file.select("#phone-apps-table")[0]
         phone_apps.append(tr_app)
+    
+    def add_to_phone_app_notifications(self, html_file, artifact, username, app_name):
+        modal_id = MODAL_PREFIX + username + app_name
+        div_modal = html_file.find(id = modal_id)
+        
+        if div_modal is None:
+            div_modal = html_file.new_tag("div")
+            div_modal['class'] = "modal fade"
+            div_modal['id'] = modal_id
+            div_modal['role'] = "dialog"
+            div_modal['tabindex'] = "-1"
+
+            div_dialog = html_file.new_tag("div")
+            div_dialog['class'] = "modal-dialog"
+            div_dialog['role'] = "document"
+            div_modal.append(div_dialog)
+
+            div_content = html_file.new_tag("div")
+            div_content['class'] = "modal-content"
+            div_dialog.append(div_content)
+
+            div_header = html_file.new_tag("div")
+            div_header['class'] = "modal-header"
+            div_content.append(div_header)
+
+            h_title = html_file.new_tag("h5")
+            h_title['class'] = "modal-title"
+            h_title.string = "Notifications"
+            div_header.append(h_title)
+
+            button_close = html_file.new_tag("button")
+            button_close['class'] = "close"
+            button_close['data-dismiss'] = "modal"
+            div_header.append(button_close)
+
+            span_close = html_file.new_tag("span")
+            span_close.string = "x"
+            button_close.append(span_close)
+
+            div_body = html_file.new_tag("div")
+            div_body['class'] = "modal-body"
+
+            div_content.append(div_body)
+
+            html_body = html_file.select("#page-content-wrapper")[0]
+            html_body.append(div_modal)
+        else:
+            hr = html_file.new_tag("hr")
+            
+            div_body = div_modal.find(class_ = "modal-body")
+            div_body.append(hr)
+
+        for attribute in artifact.getAttributes():
+            p_attribute = html_file.new_tag("p")
+            b_attribute_display = html_file.new_tag("b")
+            b_attribute_display.string = attribute.getAttributeType().getDisplayName()
+            p_attribute.string = attribute.getDisplayString()
+            div_body.append(b_attribute_display)
+            div_body.append(p_attribute)
     
     def add_to_photos(self, html_file, username, photo_id, media_id, path, list_att):
         tr_photo = self.create_tr_for_table(html_file, username, photo_id, list_att)
@@ -445,7 +518,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 self.db_conn, self.db_path = db_functions.create_db_conn(self, source_file)
         
         try:
-            rs = db_functions.execute_query(self, query, self.db_conn)
+            rs, stmt = db_functions.execute_query(self, query, self.db_conn)
             image_bytes = None
             if rs and not rs.isClosed():
                 rs.next()
@@ -457,6 +530,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 self.log(Level.INFO, "No result or closed result for image " + name)
 
             rs.close()
+            stmt.close()
 
             return image_bytes
         except Exception as e:
@@ -495,6 +569,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         art_list_photos = skCase.getMatchingArtifacts(base_query + "'YPA_PHOTO_%'")
         art_list_calls = skCase.getMatchingArtifacts(base_query + "'YPA_CALLING_%'")
         art_list_phone_apps = skCase.getMatchingArtifacts(base_query + "'YPA_PHONE_APP_%'")
+        art_list_notifications = skCase.getMatchingArtifacts(base_query + "'NA_NOTIFICATION_%'")
         total_artifact_count = len(art_list_messages) + len(art_list_contacts) + len(art_list_photos) + len(art_list_calls) + len(art_list_phone_apps)
 
         if total_artifact_count == 0:
@@ -618,6 +693,9 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         att_package_name = skCase.getAttributeType("YPA_APP_PACKAGE_NAME")
         att_version = skCase.getAttributeType("YPA_APP_VERSION")
 
+        # Notifications attributes
+        att_na_display_name = skCase.getAttributeType("NA_APP_NAME")
+
         art_count = 0
         attribute_type = self.configPanel.getAttTypeList()[self.configPanel.getSelectedAddressBookOrderIndex()]
         for artifact in sorted(art_list_contacts, key = lambda (a): a.getAttribute(attribute_type).getDisplayString()):
@@ -687,6 +765,11 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 last_updated, artifact.getAttribute(att_is_read).getValueString()]
             self.add_to_call_history(html_ypa_call_history, call_id, att_list, username)
             
+        for artifact in art_list_notifications:
+            username = artifact.getArtifactTypeName().split('_')[-1]
+            app_name = artifact.getAttribute(att_na_display_name).getValueString()
+            self.add_to_phone_app_notifications(html_ypa_phone_apps, artifact, username, app_name)
+
         for artifact in art_list_phone_apps:
             username = artifact.getArtifactTypeName().split('_')[-1]
             app_name = artifact.getAttribute(att_display_name).getValueString()
@@ -694,7 +777,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
             app_version = artifact.getAttribute(att_version).getValueString()
             play_store_link = "https://play.google.com/store/apps/details?id=" + package_name
             att_list = [app_name, package_name, app_version]
-            self.add_to_phone_apps(html_ypa_phone_apps, att_list, play_store_link, username)
+            self.add_to_phone_apps(html_ypa_phone_apps, att_list, play_store_link, username, app_name)
 
         progressBar.updateStatusLabel("Generating photos from BLOBs")
 

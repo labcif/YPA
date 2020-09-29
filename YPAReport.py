@@ -4,7 +4,6 @@ import bs4
 import datetime
 from urllib2 import urlopen
 import time
-import xml.etree.ElementTree as ET
 
 from math import ceil
 from java.lang import System
@@ -374,23 +373,6 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
 
         phone_apps = html_file.select("#phone-apps-table")[0]
         phone_apps.append(tr_app)
-    
-    def indent_xml(self, elem, level=0):
-        i = "\n" + level*"  "
-        j = "\n" + (level-1)*"  "
-        if len(elem):
-            if not elem.text or not elem.text.strip():
-                elem.text = i + "  "
-            if not elem.tail or not elem.tail.strip():
-                elem.tail = i
-            for subelem in elem:
-                self.indent_xml(subelem, level+1)
-            if not elem.tail or not elem.tail.strip():
-                elem.tail = j
-        else:
-            if level and (not elem.tail or not elem.tail.strip()):
-                elem.tail = j
-        return elem
 
     def add_to_phone_app_notifications(self, html_file, artifact, username, app_name, is_xml, index):
         modal_id = MODAL_PREFIX + username + app_name
@@ -457,12 +439,8 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
                 p_attribute.string = self.unix_to_date_string(attribute.getValueLong())
             else:
                 if att_display_name == "Payload" and is_xml:
-                    base = attribute.getDisplayString()[2:-1]
-                    root = ET.fromstring('<?xml version="1.0" encoding="utf-8"?>' + base)
-                    indented_xml_str = ET.tostring(self.indent_xml(root))
-                    
                     pre = html_file.new_tag("pre")
-                    pre.string = indented_xml_str
+                    pre.string = attribute.getDisplayString()
 
                     div_body.append(pre)
                 else:

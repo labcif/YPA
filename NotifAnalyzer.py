@@ -3,6 +3,11 @@ import sys
 import time
 import sqlite3
 import json
+# It's only used for formatting, so we don't want to crash due to it.
+try:
+    from lxml import etree
+except ImportError:
+    pass
 
 PRAGMA_USER_VERSION = 'PRAGMA user_version'
 USER_VERSION = 'user_version'
@@ -96,9 +101,14 @@ def process_notification(asset, dict_asset):
         return
     payload = asset["Payload"]
     if payload:
-        # payload = xmltodict.parse(payload)
+        try:
+            root = etree.fromstring(payload)
+            payload = etree.tostring(root, pretty_print=True).decode()
+        except Exception as e:
+            print("Failed to format XML due to " + str(e) + ". Falling back to Payload as string")
+            payload = str(payload)
         notif = {
-            "Payload": str(payload),
+            "Payload": payload,
             "Type": asset["Type"],
             "ExpiryTime": asset["ExpiryTime"],
             "ArrivalTime": asset["ArrivalTime"],

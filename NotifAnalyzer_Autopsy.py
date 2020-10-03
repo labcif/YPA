@@ -236,7 +236,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
                         art.addAttribute(BlackboardAttribute(self.att_app_name, self.moduleName, app_name))
                         art.addAttribute(BlackboardAttribute(self.att_type, self.moduleName, str(notification["Type"])))
                         art.addAttribute(BlackboardAttribute(self.att_payload_type, self.moduleName, str(notification["PayloadType"])))
-                        art.addAttribute(BlackboardAttribute(self.att_payload, self.moduleName, str(notification["Payload"])))
+                        art.addAttribute(BlackboardAttribute(self.att_payload, self.moduleName, notification["Payload"]))
                         expiry_time = self.windows_filetime_to_epoch(notification["ExpiryTime"])
                         art.addAttribute(BlackboardAttribute(self.att_expiry_time, self.moduleName, expiry_time))
                         arrival_time = self.windows_filetime_to_epoch(notification["ArrivalTime"])

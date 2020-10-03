@@ -8,6 +8,7 @@ try:
     from lxml import etree
 except ImportError:
     pass
+import re
 
 PRAGMA_USER_VERSION = 'PRAGMA user_version'
 USER_VERSION = 'user_version'
@@ -105,8 +106,12 @@ def process_notification(asset, dict_asset):
             root = etree.fromstring(payload)
             payload = etree.tostring(root, pretty_print=True).decode()
         except Exception as e:
-            print("Failed to format XML due to " + str(e) + ". Falling back to Payload as string")
-            payload = str(payload)
+            print("Failed to format XML due to " + str(e) + ". Falling back newline after '>'")
+            try:
+                payload = re.sub(r'(>)', r'\1\n', payload.decode())
+            except Exception as e:
+                print("Failed to format XML due to " + str(e) + ". Falling back to Payload as string")
+                payload = str(payload)
         notif = {
             "Payload": payload,
             "Type": asset["Type"],

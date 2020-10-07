@@ -170,7 +170,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
             full_path = (file.getParentPath() + file.getName())
             split = full_path.split('/')
             try:
-                username = split[-6]
+                username = split[-7]
             except IndexError:
                 username = "UNKNOWN"
             self.art_notification = self.create_artifact_type("NA_NOTIFICATION_" + username, "User " + username + " - Notifications", blackboard)

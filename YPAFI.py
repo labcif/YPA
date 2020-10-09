@@ -204,6 +204,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.use_mdg = self.local_settings.getSetting("mdg") == "true"
         self.use_crawler = self.local_settings.getSetting("crawler") == "true"
         self.use_b2l = self.local_settings.getSetting("b2l") == "true"
+        self.use_b2l_wal = self.local_settings.getSetting("b2l_wal") == "true"
 
         # Settings attributes
         self.att_dp_type = self.create_attribute_type('YPA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", blackboard)
@@ -824,7 +825,7 @@ class YourPhoneIngestModule(DataSourceIngestModule):
             ContentUtils.writeToFile(wal_file, File(wal_path))
             if self.use_crawler:
                 self.wal_crawl(wal_file, wal_path, blackboard)
-            if self.use_b2l:
+            if self.use_b2l_wal:
                 self.wal_2lite(b2lite, wal_file, wal_path, blackboard)
 
     def is_text(self, tester):
@@ -953,6 +954,12 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
             self.local_settings.setSetting("b2l", "true")
         else:
             self.local_settings.setSetting("b2l", "false")
+    
+    def checkBoxEventB2lWAL(self, event):
+        if self.checkboxB2lWAL.isSelected():
+            self.local_settings.setSetting("b2l_wal", "true")
+        else:
+            self.local_settings.setSetting("b2l_wal", "false")
 
     def initComponents(self):
         self.setLayout(BoxLayout(self, BoxLayout.Y_AXIS))
@@ -966,7 +973,8 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
         self.checkboxUndark = JCheckBox("Undark", actionPerformed=self.checkBoxEventUndark)
         self.checkboxMdg = JCheckBox("MGD Delete Parser", actionPerformed=self.checkBoxEventMdg)
         self.checkboxCrawler = JCheckBox("WAL Crawler", actionPerformed=self.checkBoxEventCrawler)
-        self.checkboxB2l = JCheckBox("bring2lite", actionPerformed=self.checkBoxEventB2l)
+        self.checkboxB2l = JCheckBox("bring2lite DB", actionPerformed=self.checkBoxEventB2l)
+        self.checkboxB2lWAL = JCheckBox("bring2lite WAL", actionPerformed=self.checkBoxEventB2lWAL)
         
         self.checkboxUndark.setSelected(True)
         self.checkboxMdg.setSelected(True)
@@ -977,6 +985,7 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
         panel1.add(self.checkboxMdg)
         panel1.add(self.checkboxCrawler)
         panel1.add(self.checkboxB2l)
+        panel1.add(self.checkboxB2lWAL)
         self.add(panel1)
 
     def customizeComponents(self):
@@ -991,6 +1000,7 @@ class YourPhoneWithUISettingsPanel(IngestModuleIngestJobSettingsPanel):
         self.checkboxMdg.setSelected(self.local_settings.getSetting("mdg") == "true")
         self.checkboxCrawler.setSelected(self.local_settings.getSetting("crawler") == "true")
         self.checkboxB2l.setSelected(self.local_settings.getSetting("b2l") == "true")
+        self.checkboxB2lWAL.setSelected(self.local_settings.getSetting("b2l_wal") == "true")
 
     def getSettings(self):
         return self.local_settings

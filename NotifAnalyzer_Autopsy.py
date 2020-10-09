@@ -100,7 +100,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
         self.use_crawler = self.local_settings.getSetting("crawler") == "true"
         self.use_b2l = self.local_settings.getSetting("b2l") == "true"
         self.python_path = self.local_settings.getSetting("python_path")
-        # TODO: Process handler other assets
+        self.use_b2l_wal = self.local_settings.getSetting("b2l_wal") == "true"
         
         # Generic attributes
         self.att_id = self.create_attribute_type('NA_ID', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "ID", blackboard)
@@ -329,7 +329,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
             ContentUtils.writeToFile(wal_file, File(wal_path))
             if self.use_crawler:
                 self.wal_crawl(wal_file, wal_path, blackboard)
-            if self.use_b2l:
+            if self.use_b2l_wal:
                 self.wal_2lite(b2lite, wal_file, wal_path, blackboard)
 
     def is_text(self, tester):
@@ -439,6 +439,12 @@ class NotificationAnalyzerWithUISettingsPanel(IngestModuleIngestJobSettingsPanel
         else:
             self.local_settings.setSetting("b2l", "false")
     
+    def checkBoxEventB2lWAL(self, event):
+        if self.checkboxB2lWAL.isSelected():
+            self.local_settings.setSetting("b2l_wal", "true")
+        else:
+            self.local_settings.setSetting("b2l_wal", "false")
+    
     def textFieldEventPythonPath(self, event):
         self.local_settings.setSetting("python_path", self.textFieldPythonPath.getText())
 
@@ -458,7 +464,8 @@ class NotificationAnalyzerWithUISettingsPanel(IngestModuleIngestJobSettingsPanel
         self.checkboxUndark = JCheckBox("Undark", actionPerformed=self.checkBoxEventUndark)
         self.checkboxMdg = JCheckBox("MGD Delete Parser", actionPerformed=self.checkBoxEventMdg)
         self.checkboxCrawler = JCheckBox("WAL Crawler", actionPerformed=self.checkBoxEventCrawler)
-        self.checkboxB2l = JCheckBox("bring2lite", actionPerformed=self.checkBoxEventB2l)
+        self.checkboxB2l = JCheckBox("bring2lite DB", actionPerformed=self.checkBoxEventB2l)
+        self.checkboxB2lWAL = JCheckBox("bring2lite WAL", actionPerformed=self.checkBoxEventB2lWAL)
         
         self.checkboxUndark.setSelected(True)
         self.checkboxMdg.setSelected(True)
@@ -472,6 +479,7 @@ class NotificationAnalyzerWithUISettingsPanel(IngestModuleIngestJobSettingsPanel
         panel1.add(self.checkboxMdg)
         panel1.add(self.checkboxCrawler)
         panel1.add(self.checkboxB2l)
+        panel1.add(self.checkboxB2lWAL)
         self.add(panel1)
 
     def customizeComponents(self):
@@ -488,6 +496,7 @@ class NotificationAnalyzerWithUISettingsPanel(IngestModuleIngestJobSettingsPanel
         self.checkboxMdg.setSelected(self.local_settings.getSetting("mdg") == "true")
         self.checkboxCrawler.setSelected(self.local_settings.getSetting("crawler") == "true")
         self.checkboxB2l.setSelected(self.local_settings.getSetting("b2l") == "true")
+        self.checkboxB2lWAL.setSelected(self.local_settings.getSetting("b2l_wal") == "true")
         self.textFieldPythonPath.setText(self.local_settings.getSetting("python_path"))
 
     # Return the settings used

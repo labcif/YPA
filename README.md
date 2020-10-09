@@ -21,6 +21,7 @@ Autopsy plugin made to extract information from the 'Your Phone' Windows 10 App
     * If also using the Notifications plugin, you will need:
         1. Python installed to run the external script (Python 3 recommended)
         2. lxml for proper identation: `pip install lxml` (optional)
+        3. win10toast for a Notification at the end of processing (optional)
 5.  Open your case and run the YPA file ingest module
 6.  Run the YPA Report Module with the desired options
 7.  Open the report (HTML)
@@ -28,6 +29,8 @@ Autopsy plugin made to extract information from the 'Your Phone' Windows 10 App
 ## Using Notification Analyzer as a Python script
 
 You only need Python (recommended Python 3) and lxml (`pip install lxml`).
+
+If you want a Windows Notification at the end of processing (optional): `pip install win10toast` 
 
 You can run it as:
 

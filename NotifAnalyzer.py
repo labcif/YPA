@@ -37,6 +37,11 @@ def main(args):
         json.dump(data, fp, indent=4)
     total_time = round(time.time() - start_time, 2)
     print('Elapsed time: ' + str(total_time) + 's')
+    try:
+        from win10toast import ToastNotifier
+        ToastNotifier().show_toast('NotifAnalyzer', f'Finished processing notifications! Took {str(total_time)}s', duration = None)
+    except Exception as e:
+        pass
 
 def process_db(file):
     db_info = {}

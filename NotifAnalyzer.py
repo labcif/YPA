@@ -14,7 +14,7 @@ PRAGMA_USER_VERSION = 'PRAGMA user_version'
 USER_VERSION = 'user_version'
 QUERY_ASSETS = 'SELECT RecordId, PrimaryId, nh.ParentId, AssetKey, AssetValue, WNSId, HandlerType, WNFEventName, \
                     SystemDataPropertySet, nh.CreatedTime, nh.ModifiedTime, n.Payload, n.Type, n.ArrivalTime, \
-                    n.PayloadType, n.ExpiryTime \
+                    n.PayloadType, n.ExpiryTime, n.Id \
                 FROM NotificationHandler nh  \
                 LEFT JOIN HandlerAssets ha ON ha.HandlerId = nh.RecordId \
                 LEFT JOIN Notification n ON nh.RecordId = n.HandlerId \
@@ -118,13 +118,16 @@ def process_notification(asset, dict_asset):
                 print("Failed to format XML due to " + str(e) + ". Falling back to Payload as string")
                 payload = str(payload)
         notif = {
+            "Id": asset["Id"],
             "Payload": payload,
             "Type": asset["Type"],
             "ExpiryTime": asset["ExpiryTime"],
             "ArrivalTime": asset["ArrivalTime"],
             "PayloadType": asset["PayloadType"]
             }
-        dict_asset["Notifications"].append(notif)
+        # Verify that there are no duplicate notifications
+        if not any(x["Id"] == asset["Id"] for x in dict_asset["Notifications"]):
+            dict_asset["Notifications"].append(notif)
 
 def setup_args():
     parser = argparse.ArgumentParser()

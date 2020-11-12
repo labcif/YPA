@@ -5,6 +5,7 @@ import subprocess
 import os
 from java.io import File
 from java.lang import System
+from java.lang import Integer
 from java.util.logging import Level
 from javax.swing import BoxLayout
 from javax.swing import JButton
@@ -134,7 +135,7 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
         # Recovery attributes
         self.att_dp_type = self.create_attribute_type('NA_DP_TYPE', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Type", blackboard)
         self.att_dp_offset = self.create_attribute_type('NA_DP_OFFSET', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Offset", blackboard)
-        self.att_dp_length = self.create_attribute_type('NA_DP_LENGTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Length", blackboard)
+        self.att_dp_length = self.create_attribute_type('NA_DP_LENGTH', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.INTEGER, "Length", blackboard)
         self.att_dp_data = self.create_attribute_type('NA_DP_DATA', BlackboardAttribute.TSK_BLACKBOARD_ATTRIBUTE_VALUE_TYPE.STRING, "Data", blackboard)
 
         # WAL crawler attribute
@@ -301,7 +302,9 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
                     line = f.readline()
                     while line:
                         art = file.newArtifact(self.art_freespace.getTypeID())
-                        art.addAttribute(BlackboardAttribute(self.att_rec_row, self.moduleName, str(line)))
+                        row = str(line)
+                        art.addAttribute(BlackboardAttribute(self.att_dp_length, self.moduleName, Integer(len(row))))
+                        art.addAttribute(BlackboardAttribute(self.att_rec_row, self.moduleName, row))
                         self.index_artifact(blackboard, art,self.art_freespace)
                         line = f.readline()
             except Exception as e:
@@ -313,8 +316,8 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
                 for line in res:
                     art = file.newArtifact(self.art_dp.getTypeID())
                     art.addAttribute(BlackboardAttribute(self.att_dp_type, self.moduleName, str(line[0])))
+                    art.addAttribute(BlackboardAttribute(self.att_dp_length, self.moduleName, Integer(line[2])))
                     art.addAttribute(BlackboardAttribute(self.att_dp_offset, self.moduleName, str(line[1])))
-                    art.addAttribute(BlackboardAttribute(self.att_dp_length, self.moduleName, str(line[2])))
                     art.addAttribute(BlackboardAttribute(self.att_dp_data, self.moduleName, str(line[3])))
                     self.index_artifact(blackboard, art,self.art_dp)
             except Exception as e:
@@ -371,12 +374,13 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
                         try:
                             row += str(y[1].decode('utf-8')) + ","
                         except UnicodeEncodeError:
-                            row +=str(y[1]) + ","
+                            row += str(y[1]) + ","
                             continue
                     else:
                         row += str(y[1]) + ","
                 art = file.newArtifact(art_type.getTypeID())
                 art.addAttribute(BlackboardAttribute(self.att_b2l_page, self.moduleName, str(page)))
+                art.addAttribute(BlackboardAttribute(self.att_dp_length, self.moduleName, Integer(len(row))))
                 art.addAttribute(BlackboardAttribute(self.att_b2l_row, self.moduleName, row))
                 self.index_artifact(blackboard, art, art_type)
 
@@ -388,9 +392,9 @@ class NotificationAnalyzerDataSourceIngestModule(DataSourceIngestModule):
             
             for wal_row in wal_matrix:
                 art = wal_file.newArtifact(self.art_wal_crawl.getTypeID())
+                art.addAttribute(BlackboardAttribute(self.att_dp_length, self.moduleName, Integer(len(str(wal_row['Data'])))))
                 for header in wal_crawler.get_headers():
                     art.addAttribute(BlackboardAttribute(self.att_list_headers[header], self.moduleName, str(wal_row[header])))
-                
                 self.index_artifact(blackboard, art, self.art_wal_crawl)
 
         except Exception as e:

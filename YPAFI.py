@@ -112,6 +112,11 @@ IS_READ_TYPE = {
     1 : 'Missed'
 }
 
+# Autopsy keeps adding restrictions to phone numbers...
+# Problem is that sometimes extracted data does not have valid phone numbers.
+# For example, in Your Phone we don't know the user's own phone number!
+SELF_PHONE_NUMBER = "00000"
+
 class YourPhoneIngestModuleFactory(IngestModuleFactoryAdapter):
 
     def __init__(self):
@@ -532,8 +537,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         if not messages:
             return
         commManager = skCase.getCommunicationsManager()
-        # "0" is a workaround for the username... Seems like strings are invalid inputs for Autopsy...
-        self_contact = self.get_or_create_account(commManager, file, "0")
+        # SELF_PHONE_NUMBER is a workaround for the username... Seems like strings are invalid inputs for Autopsy...
+        self_contact = self.get_or_create_account(commManager, file, SELF_PHONE_NUMBER)
         while messages.next():
             try:
                 timestamp = messages.getLong('timestamp')
@@ -746,8 +751,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         call_history, stmt = db_functions.execute_query(self, CALLINGS_QUERY, db_conn, db.getName())
         
         commManager = skCase.getCommunicationsManager()
-        # "0" is a workaround for the username... Seems like strings are invalid inputs for Autopsy...
-        self_contact = self.get_or_create_account(commManager, db, "0")
+        # SELF_PHONE_NUMBER is a workaround for the username... Seems like strings are invalid inputs for Autopsy...
+        self_contact = self.get_or_create_account(commManager, db, SELF_PHONE_NUMBER)
 
         if not call_history:
             return

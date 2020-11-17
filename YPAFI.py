@@ -105,7 +105,8 @@ CALL_TYPE = {
     '2' : 'Outgoing',
     '3' : 'Missed',
     '4' : 'Unknown',
-    '5' : 'Declined'
+    '5' : 'Declined',
+    '6' : 'Blocked'
 }
 IS_READ_TYPE = {
     0 : 'Taken',

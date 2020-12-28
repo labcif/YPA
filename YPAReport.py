@@ -557,7 +557,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     # The 'baseReportDir' object being passed in is a string with the directory that reports are being stored in.   Report should go into baseReportDir + getRelativeFilePath().
     # The 'progressBar' object is of type ReportProgressPanel.
     #   See: http://sleuthkit.org/autopsy/docs/api-docs/4.4/classorg_1_1sleuthkit_1_1autopsy_1_1report_1_1_report_progress_panel.html
-    def generateReport(self, baseReportDir, progressBar):
+    def generateReport(self, settings, progressBar):
         self.log(Level.INFO, "Starting YPA report module")
 
         self.temp_dir = Case.getCurrentCase().getTempDirectory()
@@ -605,6 +605,7 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         progressBar.increment()
         progressBar.updateStatusLabel("Creating report(s)")
 
+        baseReportDir = settings.getReportDirectoryPath()
         # Get html_file_name
         html_file_name = os.path.join(baseReportDir, self.getRelativeFilePath())
         # Get template path

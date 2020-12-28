@@ -167,6 +167,8 @@ class YourPhoneIngestModule(DataSourceIngestModule):
         self.local_settings = settings
 
     def get_or_create_account(self, manager, file, phone_number):
+        if not phone_number:
+            return None
         return manager.createAccountFileInstance(Account.Type.PHONE, phone_number, YourPhoneIngestModuleFactory.moduleName, file.getDataSource())
 
     def index_artifact(self, blackboard, artifact, artifact_type):
@@ -779,7 +781,10 @@ class YourPhoneIngestModule(DataSourceIngestModule):
                 art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_PHONE_NUMBER_FROM, YourPhoneIngestModuleFactory.moduleName, address))
                 art.addAttribute(BlackboardAttribute(BlackboardAttribute.ATTRIBUTE_TYPE.TSK_DATETIME_START, YourPhoneIngestModuleFactory.moduleName, start_time))
                 other_contact = self.get_or_create_account(commManager, db, address)
-                commManager.addRelationships(self_contact, [other_contact], art, Relationship.Type.CALL_LOG, start_time)
+                if other_contact:
+                    commManager.addRelationships(self_contact, [other_contact], art, Relationship.Type.CALL_LOG, start_time)
+                else:
+                    self.log(Level.INFO, "Skipped relationship due to null contact (private call?).")
                 self.index_artifact(blackboard, art, BlackboardArtifact.ARTIFACT_TYPE.TSK_CALLLOG)
 
             except Exception as e:

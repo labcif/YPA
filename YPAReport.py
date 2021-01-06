@@ -605,7 +605,10 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
         progressBar.increment()
         progressBar.updateStatusLabel("Creating report(s)")
 
-        baseReportDir = settings.getReportDirectoryPath()
+        autopsy_version = self.get_autopsy_version()
+        baseReportDir = settings
+        if (autopsy_version["major"] == 4 and autopsy_version["minor"] >= 16):
+            baseReportDir = settings.getReportDirectoryPath()
         # Get html_file_name
         html_file_name = os.path.join(baseReportDir, self.getRelativeFilePath())
         # Get template path
@@ -856,6 +859,21 @@ class YourPhoneAnalyzerGeneralReportModule(GeneralReportModuleAdapter):
     def getConfigurationPanel(self):
         self.configPanel = YPA_ConfigPanel()
         return self.configPanel
+    
+    def get_autopsy_version(self):
+        item = {"major": 0, "minor": 0, "patch": 0}
+        version = Version.getVersion().split('.')
+        try:
+            if len(version) >= 1:
+                item["major"] = int(version[0])
+            if len(version) >= 2:
+                item["minor"] = int(version[1])
+            if len(version) >= 3:
+                item["patch"] = int(version[2])
+        except:
+            pass
+        
+        return item
 
 #########################################################################
 #   _____                __  _          _____                     _     #
